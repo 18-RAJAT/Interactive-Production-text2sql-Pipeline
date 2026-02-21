@@ -1,0 +1,31 @@
+language: "en-US"
+early_access: false
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+  path_instructions:
+    - path: "configs/**"
+      instructions: "Review for correct YAML syntax, validate dataclass field types match YAML values, check for missing default values."
+    - path: "data/**"
+      instructions: "Verify dataset loading handles edge cases, check prompt formatting consistency, validate SQL construction logic."
+    - path: "api/**"
+      instructions: "Check endpoint validation, CORS config, error handling, and response schema correctness."
+    - path: "evaluation/**"
+      instructions: "Validate SQL normalization logic, check metric calculations, verify edge case handling in execution accuracy."
+    - path: "frontend/**"
+      instructions: "Review for TypeScript type safety, proper React hook usage, accessible UI patterns, and correct state management."
+    - path: "training/**"
+      instructions: "Check training argument correctness, gradient accumulation math, checkpoint strategy, and memory efficiency."
+    - path: "models/**"
+      instructions: "Verify quantization config, LoRA target modules, and model loading error handling."
+
+chat:
+  auto_reply: true
