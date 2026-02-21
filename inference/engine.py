@@ -2,33 +2,78 @@
 
 import time
 import torch
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional, TypedDict
 
+from configs.config_loader import Config
 from models.loader import ModelLoader
 
 
+class GenerationResult(TypedDict):
+    question: str
+    schema: str
+    generated_sql: str
+    latency_ms: float
+
+
 class InferenceEngine:
-    def __init__(self, config, adapter_path: str):
+    def __init__(self, config: Config, adapter_path: str) -> None:
+        """
+        Initialize the inference engine and load the fine-tuned model adapter.
+        
+        Parameters:
+            config: Configuration object containing model and inference settings used by the engine.
+            adapter_path (str): Filesystem path to the fine-tuned model adapter to load.
+        """
         self.config = config
         self.adapter_path = adapter_path
         self.model = None
         self.tokenizer = None
         self._load_model()
 
-    def _load_model(self):
+    def _load_model(self) -> None:
+        """
+        Load a fine-tuned model and tokenizer for inference and record the device to use.
+        
+        Loads model and tokenizer according to the instance configuration and adapter path, assigns them to `self.model` and `self.tokenizer`, sets `self.device` to the model's parameter device, and prints the adapter path used for loading.
+        """
         loader = ModelLoader(self.config)
         self.model, self.tokenizer = loader.load_for_inference(self.adapter_path)
         self.device = next(self.model.parameters()).device
         print(f"Model loaded from {self.adapter_path}")
 
     def build_prompt(self, question: str, schema: str) -> str:
+        """
+        Builds the inference prompt by embedding the instruction, database schema, and user question.
+        
+        Parameters:
+            question (str): Natural language question to convert into SQL.
+            schema (str): Database schema representation to include in the prompt.
+        
+        Returns:
+            str: Prompt string containing the instruction block with the schema and question wrapped between `[INST]` and `[/INST]`.
+        """
         return (
             f"[INST] Generate SQL for the following question.\n\n"
             f"Schema:\n{schema}\n\n"
             f"Question:\n{question} [/INST]\n"
         )
 
-    def generate(self, question: str, schema: str) -> Dict:
+    def generate(self, question: str, schema: str) -> GenerationResult:
+        """
+        Generate a SQL query from a natural language question given a database schema using the loaded model.
+        
+        Extracts the model's textual output, derives the SQL portion, trims it to the first line, and ensures it ends with a semicolon when non-empty. The returned metadata includes the original inputs and the generation latency.
+        
+        Parameters:
+            question (str): Natural language question to translate into SQL.
+            schema (str): Database schema text to condition the generation.
+        
+        Returns:
+            GenerationResult: TypedDict with keys
+                "question" (str), "schema" (str),
+                "generated_sql" (str, first line; ends with semicolon if non-empty),
+                "latency_ms" (float, milliseconds rounded to two decimals).
+        """
         prompt = self.build_prompt(question, schema)
         inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True).to(self.device)
         icfg = self.config.inference
@@ -63,7 +108,18 @@ class InferenceEngine:
             "latency_ms": round(latency * 1000, 2),
         }
 
-    def batch_generate(self, examples: list) -> list:
+    def batch_generate(self, examples: List[Dict[str, Any]]) -> List[GenerationResult]:
+        """
+        Generate SQL for a batch of examples using the engine's generate method.
+        
+        Parameters:
+            examples (List[Dict[str, Any]]): Each dict must have keys
+                "question" (str) and "schema" (str).
+        
+        Returns:
+            List[GenerationResult]: One result per example with keys
+                "question", "schema", "generated_sql", and "latency_ms".
+        """
         results = []
         for ex in examples:
             result = self.generate(ex["question"], ex["schema"])
@@ -71,6 +127,11 @@ class InferenceEngine:
         return results
 
     def interactive(self):
+        """
+        Start an interactive REPL that prompts for a database schema and a natural-language question, generates SQL for each pair, and prints the SQL and latency.
+        
+        The session accepts multi-line input via standard input; entering "quit" (case-insensitive) at either prompt ends the session. For each provided schema and question, the engine produces SQL and displays the generated SQL and its latency in milliseconds.
+        """
         print("\nText-to-SQL Interactive Mode")
         print("Type 'quit' to exit\n")
 
