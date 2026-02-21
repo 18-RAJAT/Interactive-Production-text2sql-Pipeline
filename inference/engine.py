@@ -2,13 +2,21 @@
 
 import time
 import torch
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional, TypedDict
 
+from configs.config_loader import Config
 from models.loader import ModelLoader
 
 
+class GenerationResult(TypedDict):
+    question: str
+    schema: str
+    generated_sql: str
+    latency_ms: float
+
+
 class InferenceEngine:
-    def __init__(self, config, adapter_path: str):
+    def __init__(self, config: Config, adapter_path: str) -> None:
         """
         Initialize the inference engine and load the fine-tuned model adapter.
         
@@ -50,7 +58,7 @@ class InferenceEngine:
             f"Question:\n{question} [/INST]\n"
         )
 
-    def generate(self, question: str, schema: str) -> Dict:
+    def generate(self, question: str, schema: str) -> GenerationResult:
         """
         Generate a SQL query from a natural language question given a database schema using the loaded model.
         
@@ -61,12 +69,10 @@ class InferenceEngine:
             schema (str): Database schema text to condition the generation.
         
         Returns:
-            dict: {
-                "question": original question string,
-                "schema": original schema string,
-                "generated_sql": generated SQL string (first line of model output; ends with a semicolon if non-empty),
-                "latency_ms": generation latency in milliseconds rounded to two decimals
-            }
+            GenerationResult: TypedDict with keys
+                "question" (str), "schema" (str),
+                "generated_sql" (str, first line; ends with semicolon if non-empty),
+                "latency_ms" (float, milliseconds rounded to two decimals).
         """
         prompt = self.build_prompt(question, schema)
         inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True).to(self.device)
@@ -102,17 +108,16 @@ class InferenceEngine:
             "latency_ms": round(latency * 1000, 2),
         }
 
-    def batch_generate(self, examples: list) -> list:
+    def batch_generate(self, examples: List[Dict[str, Any]]) -> List[GenerationResult]:
         """
         Generate SQL for a batch of examples using the engine's generate method.
         
         Parameters:
-            examples (list): Iterable of examples where each item is a dict with keys
-                "question" (str): natural language question
-                "schema" (str): database schema to use for generation
+            examples (List[Dict[str, Any]]): Each dict must have keys
+                "question" (str) and "schema" (str).
         
         Returns:
-            list: A list of result dictionaries, each containing the keys
+            List[GenerationResult]: One result per example with keys
                 "question", "schema", "generated_sql", and "latency_ms".
         """
         results = []
