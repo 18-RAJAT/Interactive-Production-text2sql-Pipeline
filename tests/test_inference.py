@@ -4,31 +4,28 @@ from inference.engine import InferenceEngine
 
 
 class TestInferenceEngine:
-    def test_build_prompt_format(self):
+    @patch.object(InferenceEngine, "_load_model")
+    def test_build_prompt_format(self, _mock_load):
+        engine = InferenceEngine.__new__(InferenceEngine)
+        engine.config = MagicMock()
+
         schema = "CREATE TABLE t (id INTEGER, name TEXT)"
         question = "How many rows?"
-
-        # Test the prompt format without loading a model
-        prompt = (
-            f"[INST] Generate SQL for the following question.\n\n"
-            f"Schema:\n{schema}\n\n"
-            f"Question:\n{question} [/INST]\n"
-        )
+        prompt = engine.build_prompt(question, schema)
 
         assert "[INST]" in prompt
         assert "[/INST]" in prompt
         assert schema in prompt
         assert question in prompt
 
-    def test_prompt_contains_schema_and_question(self):
+    @patch.object(InferenceEngine, "_load_model")
+    def test_prompt_contains_schema_and_question(self, _mock_load):
+        engine = InferenceEngine.__new__(InferenceEngine)
+        engine.config = MagicMock()
+
         schema = "CREATE TABLE employees (id INTEGER, salary REAL)"
         question = "What is the max salary?"
-
-        prompt = (
-            f"[INST] Generate SQL for the following question.\n\n"
-            f"Schema:\n{schema}\n\n"
-            f"Question:\n{question} [/INST]\n"
-        )
+        prompt = engine.build_prompt(question, schema)
 
         assert "employees" in prompt
         assert "max salary" in prompt
@@ -42,7 +39,7 @@ class TestInferenceEngine:
         mock_loader_cls.return_value = mock_loader
 
         mock_config = MagicMock()
-        engine = InferenceEngine(mock_config, "/fake/path")
+        InferenceEngine(mock_config, "/fake/path")
 
         mock_loader.load_for_inference.assert_called_once_with("/fake/path")
 

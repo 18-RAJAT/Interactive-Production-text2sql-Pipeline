@@ -63,7 +63,7 @@ class TestWikiSQLPipeline:
         config.data.max_train_samples = 20
         config.data.max_val_samples = 5
         pipeline = WikiSQLPipeline(config)
-        train, val, test = pipeline.prepare()
+        train, val, *_ = pipeline.prepare()
 
         assert len(train) == 20
         assert len(val) == 5
