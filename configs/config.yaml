@@ -1,0 +1,71 @@
+# ═══════════════════════════════════════════════════════════════
+# Text-to-SQL Fine-Tuning Configuration
+# ═══════════════════════════════════════════════════════════════
+
+project:
+  name: "text-to-sql-wikisql"
+  seed: 42
+  output_dir: "./outputs"
+  logging_dir: "./outputs/logs"
+
+model:
+  name: "mistralai/Mistral-7B-v0.1"
+  max_seq_length: 1024
+  dtype: "bfloat16"
+  trust_remote_code: true
+
+quantization:
+  load_in_4bit: true
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_use_double_quant: true
+
+lora:
+  r: 16
+  lora_alpha: 32
+  lora_dropout: 0.05
+  bias: "none"
+  task_type: "CAUSAL_LM"
+  target_modules:
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+    - "gate_proj"
+    - "up_proj"
+    - "down_proj"
+
+data:
+  dataset_name: "wikisql"
+  val_split_ratio: 0.1
+  max_train_samples: null
+  max_val_samples: null
+  num_workers: 4
+
+training:
+  num_epochs: 3
+  per_device_train_batch_size: 4
+  per_device_eval_batch_size: 4
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-4
+  weight_decay: 0.01
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.05
+  max_grad_norm: 1.0
+  fp16: false
+  bf16: true
+  logging_steps: 25
+  eval_steps: 250
+  save_steps: 250
+  save_total_limit: 3
+  load_best_model_at_end: true
+  metric_for_best_model: "eval_loss"
+  greater_is_better: false
+  report_to: "none"
+
+inference:
+  max_new_tokens: 256
+  temperature: 0.1
+  top_p: 0.95
+  do_sample: true
+  repetition_penalty: 1.15
