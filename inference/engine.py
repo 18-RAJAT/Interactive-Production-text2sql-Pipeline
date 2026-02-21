@@ -22,7 +22,7 @@ class InferenceEngine:
         self.tokenizer = None
         self._load_model()
 
-    def _load_model(self):
+    def _load_model(self) -> None:
         """
         Load a fine-tuned model and tokenizer for inference and record the device to use.
         
