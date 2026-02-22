@@ -1,0 +1,345 @@
+[
+  {
+    "day": 1,
+    "title": "Multi-model support with per-model prompt templates",
+    "body": "Add support for CodeLlama, Phi-3, Gemma, DeepSeek-Coder beyond Mistral-7B. Create a prompt template registry so each model uses its correct chat format instead of hardcoded [INST] tags.",
+    "priority": "P1 - High",
+    "category": "Model & Training"
+  },
+  {
+    "day": 1,
+    "title": "Model comparison benchmarking script",
+    "body": "Create a script that trains and evaluates multiple models, then generates a comparison table with accuracy, latency, memory usage, and training time.",
+    "priority": "P2 - Medium",
+    "category": "Model & Training"
+  },
+  {
+    "day": 1,
+    "title": "DPO / Preference optimization training",
+    "body": "Implement Direct Preference Optimization (DPO) where correct SQL is preferred over incorrect SQL for improved generation quality.",
+    "priority": "P2 - Medium",
+    "category": "Model & Training"
+  },
+  {
+    "day": 1,
+    "title": "Curriculum learning for progressive difficulty",
+    "body": "Start training on simple queries and progressively move to harder ones. Leverage the existing query classifier (simple/filter/aggregation) for difficulty ordering.",
+    "priority": "P3 - Low",
+    "category": "Model & Training"
+  },
+  {
+    "day": 1,
+    "title": "Spider dataset support",
+    "body": "Add a data pipeline for the Spider dataset — the gold standard for cross-database, multi-table text-to-SQL evaluation. Implement proper schema linking.",
+    "priority": "P1 - High",
+    "category": "Model & Training"
+  },
+  {
+    "day": 1,
+    "title": "BIRD-SQL dataset integration",
+    "body": "Add support for the BIRD-SQL benchmark with real-world databases and more complex queries than WikiSQL.",
+    "priority": "P2 - Medium",
+    "category": "Model & Training"
+  },
+  {
+    "day": 1,
+    "title": "Early stopping based on validation accuracy",
+    "body": "Implement early stopping using validation exact-match accuracy instead of just training loss to prevent overfitting.",
+    "priority": "P1 - High",
+    "category": "Model & Training"
+  },
+  {
+    "day": 2,
+    "title": "Wire up execution accuracy in evaluate_dataset()",
+    "body": "The execution_accuracy() method exists in evaluator.py but is not used in evaluate_dataset(). Wire it up to run predicted and gold SQL against a temp SQLite DB and compare result sets.",
+    "priority": "P0 - Critical",
+    "category": "Evaluation & Metrics"
+  },
+  {
+    "day": 2,
+    "title": "Valid SQL rate metric",
+    "body": "Track what percentage of generated SQL statements are syntactically valid using sqlparse or sqlglot.",
+    "priority": "P1 - High",
+    "category": "Evaluation & Metrics"
+  },
+  {
+    "day": 2,
+    "title": "Component-level evaluation metrics",
+    "body": "Break down accuracy into SELECT accuracy, WHERE accuracy, GROUP BY accuracy, ORDER BY accuracy, and JOIN accuracy (Spider-style component metrics).",
+    "priority": "P1 - High",
+    "category": "Evaluation & Metrics"
+  },
+  {
+    "day": 2,
+    "title": "Expand query complexity categories",
+    "body": "Extend classify_query() beyond simple/filter/aggregation to include: JOIN, subquery, GROUP BY, ORDER BY, HAVING, nested, and UNION categories.",
+    "priority": "P2 - Medium",
+    "category": "Evaluation & Metrics"
+  },
+  {
+    "day": 2,
+    "title": "HTML evaluation report with charts",
+    "body": "Generate an interactive HTML report with accuracy-by-category charts, confusion matrices, error analysis, and sample predictions.",
+    "priority": "P2 - Medium",
+    "category": "Evaluation & Metrics"
+  },
+  {
+    "day": 2,
+    "title": "Latency benchmarking in evaluation",
+    "body": "Track tokens/second, time-to-first-token, and end-to-end latency during evaluation and include in the report.",
+    "priority": "P3 - Low",
+    "category": "Evaluation & Metrics"
+  },
+  {
+    "day": 2,
+    "title": "Confidence scoring via log-probabilities",
+    "body": "Implement real confidence scores using token-level log probabilities (average/min) instead of the hardcoded mock value. The frontend already displays confidence badges.",
+    "priority": "P0 - Critical",
+    "category": "Inference & API"
+  },
+  {
+    "day": 3,
+    "title": "SQL validation layer before response",
+    "body": "Parse generated SQL with sqlparse/sqlglot before returning to validate syntax. Auto-correct common issues like missing semicolons or unbalanced parentheses.",
+    "priority": "P1 - High",
+    "category": "Inference & API"
+  },
+  {
+    "day": 3,
+    "title": "Streaming inference via SSE",
+    "body": "Add Server-Sent Events endpoint for token-by-token SQL generation streaming. The frontend can then show SQL appearing in real-time.",
+    "priority": "P1 - High",
+    "category": "Inference & API"
+  },
+  {
+    "day": 3,
+    "title": "Batch inference API endpoint",
+    "body": "Add POST /generate_sql_batch to accept multiple questions at once for bulk processing with parallel inference.",
+    "priority": "P2 - Medium",
+    "category": "Inference & API"
+  },
+  {
+    "day": 3,
+    "title": "Configurable decoding strategies",
+    "body": "Expose beam search, top-k, top-p, and temperature as API parameters so users can tune generation quality vs diversity.",
+    "priority": "P2 - Medium",
+    "category": "Inference & API"
+  },
+  {
+    "day": 3,
+    "title": "Wire up SQL execution results in API",
+    "body": "The frontend has ExecutionResultsTable but the API does not return execution_result. Execute generated SQL against a temp DB and return results.",
+    "priority": "P1 - High",
+    "category": "Inference & API"
+  },
+  {
+    "day": 3,
+    "title": "API versioning and rate limiting",
+    "body": "Add /v1/ prefix, rate limiting middleware, and optional API key authentication for production readiness.",
+    "priority": "P3 - Low",
+    "category": "Inference & API"
+  },
+  {
+    "day": 3,
+    "title": "SQL syntax highlighting in output",
+    "body": "Add syntax highlighting for generated SQL using react-syntax-highlighter or prism-react-renderer instead of plain text display.",
+    "priority": "P1 - High",
+    "category": "Frontend"
+  },
+  {
+    "day": 4,
+    "title": "In-browser SQL execution with sql.js",
+    "body": "Integrate sql.js (SQLite compiled to WASM) to let users execute generated SQL against their schema directly in the browser without a backend.",
+    "priority": "P0 - Critical",
+    "category": "Frontend"
+  },
+  {
+    "day": 4,
+    "title": "Schema auto-detection from SQL file upload",
+    "body": "Allow users to upload a .sql file and auto-extract the schema instead of manually typing DDL statements.",
+    "priority": "P1 - High",
+    "category": "Frontend"
+  },
+  {
+    "day": 4,
+    "title": "Visual schema builder",
+    "body": "Add a drag-and-drop visual interface for creating tables and columns instead of writing raw DDL.",
+    "priority": "P3 - Low",
+    "category": "Frontend"
+  },
+  {
+    "day": 4,
+    "title": "SQL formatting / pretty-print",
+    "body": "Auto-format generated SQL output for better readability with proper indentation and keyword casing.",
+    "priority": "P2 - Medium",
+    "category": "Frontend"
+  },
+  {
+    "day": 4,
+    "title": "Explain this SQL button",
+    "body": "Add a button that sends generated SQL back to the model to get a natural language explanation of what the query does.",
+    "priority": "P2 - Medium",
+    "category": "Frontend"
+  },
+  {
+    "day": 4,
+    "title": "Multi-turn conversational queries",
+    "body": "Support follow-up queries like 'Now add a WHERE clause for age > 25' that build on previous SQL generation context.",
+    "priority": "P2 - Medium",
+    "category": "Frontend"
+  },
+  {
+    "day": 4,
+    "title": "Query result visualization with charts",
+    "body": "Generate bar charts for aggregation results, pie charts for distributions, and data tables for SELECT results.",
+    "priority": "P2 - Medium",
+    "category": "Frontend"
+  },
+  {
+    "day": 5,
+    "title": "Export results to CSV/JSON",
+    "body": "Add buttons to export query results and generated SQL to CSV, JSON, or clipboard.",
+    "priority": "P3 - Low",
+    "category": "Frontend"
+  },
+  {
+    "day": 5,
+    "title": "Keyboard shortcuts",
+    "body": "Add Ctrl+Enter to submit, Ctrl+K for command palette, Esc to clear, and other productivity shortcuts.",
+    "priority": "P3 - Low",
+    "category": "Frontend"
+  },
+  {
+    "day": 5,
+    "title": "Model comparison side-by-side view",
+    "body": "Show results from different models or prompt strategies side-by-side for comparison.",
+    "priority": "P3 - Low",
+    "category": "Frontend"
+  },
+  {
+    "day": 5,
+    "title": "Data augmentation via paraphrasing",
+    "body": "Use an LLM to generate multiple phrasings of the same question to improve training robustness and generalization.",
+    "priority": "P2 - Medium",
+    "category": "Data Pipeline"
+  },
+  {
+    "day": 5,
+    "title": "Schema augmentation for generalization",
+    "body": "Rename tables and columns in training data to test and improve model generalization to unseen schemas.",
+    "priority": "P2 - Medium",
+    "category": "Data Pipeline"
+  },
+  {
+    "day": 5,
+    "title": "Data deduplication pipeline",
+    "body": "Detect and remove near-duplicate examples from the training set to improve data quality.",
+    "priority": "P2 - Medium",
+    "category": "Data Pipeline"
+  },
+  {
+    "day": 5,
+    "title": "SQL validation in data pipeline",
+    "body": "Verify all SQL in the dataset parses and executes correctly before training. Flag and filter broken examples.",
+    "priority": "P1 - High",
+    "category": "Data Pipeline"
+  },
+  {
+    "day": 6,
+    "title": "Custom dataset upload support",
+    "body": "Allow users to upload their own (question, schema, SQL) triples via frontend or CLI for domain-specific fine-tuning.",
+    "priority": "P1 - High",
+    "category": "Data Pipeline"
+  },
+  {
+    "day": 6,
+    "title": "Train/test contamination check",
+    "body": "Add automated checking to ensure no data leakage between training and test splits.",
+    "priority": "P2 - Medium",
+    "category": "Data Pipeline"
+  },
+  {
+    "day": 6,
+    "title": "Weights & Biases experiment tracking",
+    "body": "Integrate W&B for tracking training runs, hyperparameters, metrics, and model artifacts across experiments.",
+    "priority": "P1 - High",
+    "category": "MLOps"
+  },
+  {
+    "day": 6,
+    "title": "Dockerfile and docker-compose setup",
+    "body": "Create Dockerfile for the API server (with GPU support) and docker-compose.yml for running frontend + backend together.",
+    "priority": "P1 - High",
+    "category": "MLOps"
+  },
+  {
+    "day": 6,
+    "title": "GitHub Actions CI/CD pipeline",
+    "body": "Add workflows that run tests on PR, lint and type-check frontend, and optionally train on a small sample to check accuracy regression.",
+    "priority": "P1 - High",
+    "category": "MLOps"
+  },
+  {
+    "day": 6,
+    "title": "Model registry and versioning",
+    "body": "Store and version trained adapters with metadata (dataset used, accuracy, config hash, training date) for reproducibility.",
+    "priority": "P2 - Medium",
+    "category": "MLOps"
+  },
+  {
+    "day": 6,
+    "title": "Prometheus metrics and monitoring",
+    "body": "Add request count, latency histograms, error rate metrics, and a Grafana dashboard for production monitoring.",
+    "priority": "P2 - Medium",
+    "category": "MLOps"
+  },
+  {
+    "day": 7,
+    "title": "Structured logging with query audit trail",
+    "body": "Implement structured JSON logging of all queries, schemas, generated SQL, and latencies for debugging and analytics.",
+    "priority": "P2 - Medium",
+    "category": "MLOps"
+  },
+  {
+    "day": 7,
+    "title": "RAG for large schema retrieval",
+    "body": "For databases with 100+ tables, use embedding-based retrieval to find relevant tables/columns before generating SQL.",
+    "priority": "P1 - High",
+    "category": "Advanced Features"
+  },
+  {
+    "day": 7,
+    "title": "Multi-database dialect support",
+    "body": "Generate SQL tailored to PostgreSQL, MySQL, or SQLite dialects based on user selection.",
+    "priority": "P1 - High",
+    "category": "Advanced Features"
+  },
+  {
+    "day": 7,
+    "title": "SQL-to-Text reverse explanation",
+    "body": "Add reverse feature: given SQL, generate a natural language explanation. Useful for documentation and onboarding.",
+    "priority": "P2 - Medium",
+    "category": "Advanced Features"
+  },
+  {
+    "day": 7,
+    "title": "Interactive error correction loop",
+    "body": "When generated SQL fails to execute, automatically retry with the error message in the prompt for self-correction.",
+    "priority": "P1 - High",
+    "category": "Advanced Features"
+  },
+  {
+    "day": 7,
+    "title": "Multi-step SQL agent",
+    "body": "Build an agent that explores the schema, generates SQL, executes it, validates results, and self-corrects if needed.",
+    "priority": "P2 - Medium",
+    "category": "Advanced Features"
+  },
+  {
+    "day": 7,
+    "title": "Conversational text-to-SQL (CoSQL/SParC)",
+    "body": "Support multi-turn conversational SQL generation where context from previous questions carries over.",
+    "priority": "P3 - Low",
+    "category": "Advanced Features"
+  }
+]
