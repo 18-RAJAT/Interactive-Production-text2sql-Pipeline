@@ -1,0 +1,88 @@
+name: Daily Issue Queue
+
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+    inputs:
+      day_override:
+        description: 'Force a specific day number (1-7) instead of auto-calculating'
+        required: false
+        type: number
+
+permissions:
+  issues: write
+  contents: read
+  repository-projects: write
+
+env:
+  START_DATE: '2026-02-23'
+  PROJECT_NUMBER: 4
+
+jobs:
+  create-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Calculate day number
+        id: calc
+        run: |
+          if [ -n "${{ inputs.day_override }}" ]; then
+            DAY=${{ inputs.day_override }}
+          else
+            START="$START_DATE"
+            TODAY=$(date -u +%Y-%m-%d)
+            START_SEC=$(date -u -d "$START" +%s)
+            TODAY_SEC=$(date -u -d "$TODAY" +%s)
+            DIFF=$(( (TODAY_SEC - START_SEC) / 86400 ))
+            DAY=$(( DIFF + 1 ))
+          fi
+
+          echo "day=$DAY" >> "$GITHUB_OUTPUT"
+          echo "Calculated day: $DAY"
+
+          if [ "$DAY" -lt 1 ] || [ "$DAY" -gt 7 ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Day $DAY is outside range 1-7. Skipping."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create issues for today's batch
+        if: steps.calc.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          DAY=${{ steps.calc.outputs.day }}
+          echo "Creating issues for Day $DAY..."
+          echo ""
+
+          ITEMS=$(jq -c --argjson day "$DAY" '.[] | select(.day == $day)' .github/issue-queue.json)
+
+          COUNT=0
+          while IFS= read -r item; do
+            TITLE=$(echo "$item" | jq -r '.title')
+            BODY=$(echo "$item" | jq -r '.body')
+            PRIORITY=$(echo "$item" | jq -r '.priority')
+            CATEGORY=$(echo "$item" | jq -r '.category')
+
+            ISSUE_URL=$(gh issue create \
+              --title "$TITLE" \
+              --body "$BODY" \
+              --label "$PRIORITY" \
+              --label "$CATEGORY")
+
+            COUNT=$((COUNT + 1))
+            echo "[$COUNT] Created: $TITLE ($ISSUE_URL)"
+
+            ISSUE_NUM=$(echo "$ISSUE_URL" | grep -o '[0-9]*$')
+            gh project item-add "$PROJECT_NUMBER" \
+              --owner "${{ github.repository_owner }}" \
+              --url "$ISSUE_URL" 2>/dev/null || true
+
+          done <<< "$ITEMS"
+
+          echo ""
+          echo "Done! Created $COUNT issues for Day $DAY."
