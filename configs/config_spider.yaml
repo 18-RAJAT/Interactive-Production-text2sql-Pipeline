@@ -1,0 +1,65 @@
+project:
+  name: "text-to-sql-spider"
+  seed: 42
+  output_dir: "./outputs/spider"
+  logging_dir: "./outputs/spider/logs"
+
+model:
+  name: "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+  max_seq_length: 256
+  dtype: "float16"
+  trust_remote_code: true
+
+quantization:
+  load_in_4bit: false
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_compute_dtype: "float16"
+  bnb_4bit_use_double_quant: false
+
+lora:
+  r: 8
+  lora_alpha: 16
+  lora_dropout: 0.05
+  bias: "none"
+  task_type: "CAUSAL_LM"
+  target_modules:
+    - "q_proj"
+    - "v_proj"
+
+data:
+  dataset_name: "spider-csv"
+  val_split_ratio: 0.1
+  max_train_samples: null
+  max_val_samples: null
+  num_workers: 0
+
+training:
+  num_epochs: 3
+  per_device_train_batch_size: 1
+  per_device_eval_batch_size: 1
+  gradient_accumulation_steps: 16
+  learning_rate: 2.0e-4
+  weight_decay: 0.01
+  lr_scheduler_type: "cosine"
+  warmup_ratio: 0.05
+  max_grad_norm: 1.0
+  fp16: true
+  bf16: false
+  logging_steps: 25
+  eval_steps: 200
+  save_steps: 200
+  save_total_limit: 2
+  load_best_model_at_end: true
+  metric_for_best_model: "eval_loss"
+  greater_is_better: false
+  report_to: "none"
+  early_stopping_patience: 3
+  early_stopping_threshold: 0.01
+  early_stopping_eval_samples: 30
+
+inference:
+  max_new_tokens: 256
+  temperature: 0.1
+  top_p: 0.95
+  do_sample: true
+  repetition_penalty: 1.15
