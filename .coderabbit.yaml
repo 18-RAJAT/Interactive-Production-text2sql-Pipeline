@@ -14,7 +14,7 @@ reviews:
   path_instructions:
     - path: "configs/**"
       instructions: "Review for correct YAML syntax, validate dataclass field types match YAML values, check for missing default values."
-    - path: "data/**"
+    - path: "data/**" 
       instructions: "Verify dataset loading handles edge cases, check prompt formatting consistency, validate SQL construction logic."
     - path: "api/**"
       instructions: "Check endpoint validation, CORS config, error handling, and response schema correctness."
