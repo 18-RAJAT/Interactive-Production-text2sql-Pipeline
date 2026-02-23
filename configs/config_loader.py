@@ -68,9 +68,12 @@ class TrainingConfig:
     save_steps: int = 250
     save_total_limit: int = 3
     load_best_model_at_end: bool = True
-    metric_for_best_model: str = "eval_loss"
-    greater_is_better: bool = False
+    metric_for_best_model: str = "eval_exact_match"
+    greater_is_better: bool = True
     report_to: str = "none"
+    early_stopping_patience: int = 3
+    early_stopping_threshold: float = 0.01
+    early_stopping_eval_samples: int = 50
 
 
 @dataclass

@@ -59,9 +59,12 @@ training:
   save_steps: 250
   save_total_limit: 3
   load_best_model_at_end: true
-  metric_for_best_model: "eval_loss"
-  greater_is_better: false
+  metric_for_best_model: "eval_exact_match"
+  greater_is_better: true
   report_to: "none"
+  early_stopping_patience: 3
+  early_stopping_threshold: 0.01
+  early_stopping_eval_samples: 50
 
 inference:
   max_new_tokens: 256
