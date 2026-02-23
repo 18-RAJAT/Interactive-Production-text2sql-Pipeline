@@ -1,14 +1,87 @@
-"""Training engine with SFTTrainer, logging, and checkpointing."""
+"""Training engine with SFTTrainer, logging, checkpointing, and early stopping."""
 
-import os
+import re
 import json
 from pathlib import Path
 from datetime import datetime
 
-from transformers import TrainingArguments
+import torch
+from transformers import TrainingArguments, TrainerCallback, EarlyStoppingCallback
 from trl import SFTTrainer
 
 from utils.helpers import set_seed
+
+
+def _normalize_sql(sql: str) -> str:
+    sql = sql.strip().lower()
+    sql = re.sub(r"\s+", " ", sql)
+    sql = sql.rstrip(";").strip()
+    sql = re.sub(r"\s*,\s*", ", ", sql)
+    sql = re.sub(r"\s*=\s*", " = ", sql)
+    sql = re.sub(r"\s*>\s*", " > ", sql)
+    sql = re.sub(r"\s*<\s*", " < ", sql)
+    return sql
+
+
+class ExactMatchEvalCallback(TrainerCallback):
+    """Computes exact-match accuracy on a validation subset at each eval step.
+
+    Runs model.generate() on a sample of the validation set, extracts the
+    predicted SQL, and compares against gold SQL using normalized matching.
+    The metric is logged as ``eval_exact_match`` so it can drive best-model
+    selection and early stopping.
+    """
+
+    def __init__(self, val_dataset, tokenizer, config, max_samples=50):
+        self.val_dataset = val_dataset
+        self.tokenizer = tokenizer
+        self.config = config
+        self.max_samples = min(max_samples, len(val_dataset))
+
+    def _generate_sql(self, model, prompt):
+        inputs = self.tokenizer(prompt, return_tensors="pt", truncation=True)
+        inputs = {k: v.to(model.device) for k, v in inputs.items()}
+        icfg = self.config.inference
+
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs,
+                max_new_tokens=icfg.max_new_tokens,
+                temperature=icfg.temperature,
+                top_p=icfg.top_p,
+                do_sample=icfg.do_sample,
+                repetition_penalty=icfg.repetition_penalty,
+                pad_token_id=self.tokenizer.pad_token_id,
+            )
+
+        full_output = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+        if "[/INST]" in full_output:
+            return full_output.split("[/INST]")[-1].strip()
+        return full_output[len(prompt):].strip()
+
+    def on_evaluate(self, args, state, control, model=None, **kwargs):
+        if model is None:
+            return
+
+        model.eval()
+        correct = 0
+        total = self.max_samples
+
+        for i in range(total):
+            example = self.val_dataset[i]
+            predicted = self._generate_sql(model, example["prompt"])
+            gold = example["sql"]
+            if _normalize_sql(predicted) == _normalize_sql(gold):
+                correct += 1
+
+        accuracy = correct / total if total > 0 else 0.0
+
+        if state.log_history:
+            state.log_history[-1]["eval_exact_match"] = accuracy
+        else:
+            state.log_history.append({"eval_exact_match": accuracy})
+
+        print(f"  [ExactMatch] {correct}/{total} = {accuracy:.4f}")
 
 
 class SQLTrainer:
@@ -78,8 +151,26 @@ class SQLTrainer:
         with open(meta_path, "w") as f:
             json.dump(metadata, f, indent=2)
 
+    def _build_callbacks(self):
+        tcfg = self.config.training
+
+        em_callback = ExactMatchEvalCallback(
+            val_dataset=self.val_dataset,
+            tokenizer=self.tokenizer,
+            config=self.config,
+            max_samples=tcfg.early_stopping_eval_samples,
+        )
+
+        es_callback = EarlyStoppingCallback(
+            early_stopping_patience=tcfg.early_stopping_patience,
+            early_stopping_threshold=tcfg.early_stopping_threshold,
+        )
+
+        return [em_callback, es_callback]
+
     def train(self):
         training_args = self._build_training_args()
+        callbacks = self._build_callbacks()
 
         trainer = SFTTrainer(
             model=self.model,
@@ -89,9 +180,14 @@ class SQLTrainer:
             dataset_text_field="text",
             max_seq_length=self.config.model.max_seq_length,
             tokenizer=self.tokenizer,
+            callbacks=callbacks,
         )
 
+        tcfg = self.config.training
         print(f"Starting training: {len(self.train_dataset)} train, {len(self.val_dataset)} val")
+        print(f"Early stopping: patience={tcfg.early_stopping_patience}, "
+              f"threshold={tcfg.early_stopping_threshold}, "
+              f"eval_samples={tcfg.early_stopping_eval_samples}")
 
         result = trainer.train()
         self._save_training_metadata(trainer)

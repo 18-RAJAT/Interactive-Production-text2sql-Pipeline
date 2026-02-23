@@ -1,3 +1,3 @@
-from .trainer import SQLTrainer
+from .trainer import SQLTrainer, ExactMatchEvalCallback
 
-__all__ = ["SQLTrainer"]
+__all__ = ["SQLTrainer", "ExactMatchEvalCallback"]
