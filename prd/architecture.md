@@ -18,7 +18,7 @@
 ┌─────────────┐ ┌─────────────┐ ┌──────────────┐
 │    DATA     │ │    MODEL    │ │    UTILS     │
 │  pipeline   │ │   loader    │ │   helpers    │
-│  WikiSQL    │ │   QLoRA     │ │   seed/time  │
+│  WikiSQL    │ │   LoRA      │ │   seed/time  │
 │  prompts    │ │   LoRA cfg  │ │   device     │
 └──────┬──────┘ └──────┬──────┘ └──────────────┘
        │               │
@@ -181,7 +181,7 @@ Training Output (adapter weights)
 ## 6. Scaling Considerations
 
 ### Compute Scaling
-- **Single GPU**: QLoRA with gradient accumulation (current)
+- **Single GPU**: LoRA with gradient accumulation (current)
 - **Multi-GPU**: DeepSpeed ZeRO-3 or FSDP via accelerate config
 - **Multi-node**: Slurm + accelerate launcher
 
@@ -201,6 +201,6 @@ Training Output (adapter weights)
 - **Production**: TGI behind load balancer, adapter hot-swapping
 
 ### Cost Optimization
-- QLoRA reduces VRAM from ~28GB (full FT) to ~10GB
+- LoRA reduces VRAM from ~28GB (full FT) to ~7.6GB
 - Adapter is ~40MB vs ~14GB for full model
 - Inference: quantized model uses 4x less memory

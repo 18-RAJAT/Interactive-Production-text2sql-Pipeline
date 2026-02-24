@@ -12,7 +12,7 @@
 
 Natural language to SQL translation remains a critical bottleneck in data democratization. Non-technical users cannot query databases without SQL expertise. Existing general-purpose LLMs produce inconsistent SQL that fails execution on real schemas.
 
-**This system** fine-tunes an open-source LLM using QLoRA on WikiSQL to produce accurate, executable SQL from natural language questions grounded in specific database schemas.
+**This system** fine-tunes an open-source LLM using SFT with LoRA on the Spider dataset to produce accurate, executable SQL from natural language questions grounded in specific database schemas.
 
 ---
 
@@ -33,7 +33,7 @@ Natural language to SQL translation remains a critical bottleneck in data democr
 ### In Scope
 
 - WikiSQL dataset processing and prompt formatting
-- QLoRA fine-tuning of Mistral-7B (configurable base model)
+- SFT + LoRA fine-tuning of TinyLlama-1.1B (configurable base model)
 - Evaluation harness with exact match and execution accuracy
 - Single-query and batch inference
 - Reproducible training with config-driven hyperparameters
@@ -103,7 +103,7 @@ Natural language to SQL translation remains a critical bottleneck in data democr
 |------------|---------------|
 | Reproducibility | Seed-controlled, config-driven |
 | Modularity | Each component independently testable |
-| Memory | QLoRA enables training on 16GB GPU |
+| Memory | LoRA enables training on 16GB unified memory (Apple MPS) |
 | Extensibility | Swap base model, dataset, or prompt format via config |
 
 ---
