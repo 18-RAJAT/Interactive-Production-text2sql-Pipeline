@@ -32,6 +32,7 @@ def main():
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--lr", type=float, default=None)
     parser.add_argument("--batch_size", type=int, default=None)
+    parser.add_argument("--resume", action="store_true", help="Resume from latest checkpoint")
     args = parser.parse_args()
 
     config = load_config(args.config)
@@ -141,8 +142,18 @@ def main():
     print(f"  Epochs: {tcfg.num_epochs}, Batch: {tcfg.per_device_train_batch_size}x{tcfg.gradient_accumulation_steps}={eff_batch}")
     print(f"  LR: {tcfg.learning_rate}, Eval every {tcfg.eval_steps} steps")
 
+    resume_path = None
+    if args.resume:
+        ckpt_dir = output_dir / "checkpoints"
+        checkpoints = sorted(ckpt_dir.glob("checkpoint-*"), key=lambda p: int(p.name.split("-")[-1]))
+        if checkpoints:
+            resume_path = str(checkpoints[-1])
+            print(f"  Resuming from: {resume_path}")
+        else:
+            print("  No checkpoint found, starting fresh")
+
     with Timer("Training"):
-        result = trainer.train()
+        result = trainer.train(resume_from_checkpoint=resume_path)
 
     final_path = output_dir / "final_model"
     trainer.save_model(str(final_path))
