@@ -14,7 +14,7 @@ Fine-tune TinyLlama-1.1B (or any HuggingFace causal LM) to generate SQL queries 
 
 ## Project Structure
 
-```
+```text
 text-to-sql-finetuning/
 ├── configs/                 # YAML config + dataclass loader
 │   ├── config.yaml
