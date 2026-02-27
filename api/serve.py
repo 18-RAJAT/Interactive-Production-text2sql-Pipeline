@@ -4,6 +4,7 @@ import re
 import sys
 import time
 import argparse
+import os
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -13,13 +14,15 @@ import torch
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, List, Tuple
+from typing import Optional
+
+from utils.helpers import get_device
 
 model = None
 tokenizer = None
 
 
-def _parse_schema(schema: str) -> List[Tuple[str, List[str]]]:
+def _parse_schema(schema: str) -> list[tuple[str, list[str]]]:
     tables = []
     for match in re.finditer(
         r'CREATE\s+TABLE\s+(\w+)\s*\((.*?)\)', schema, re.IGNORECASE | re.DOTALL
@@ -40,7 +43,7 @@ def _parse_schema(schema: str) -> List[Tuple[str, List[str]]]:
     return tables
 
 
-def _generate_smart_sql(question: str, schema: str) -> Tuple[str, float]:
+def _generate_smart_sql(question: str, schema: str) -> tuple[str, float]:
     start = time.time()
     q = question.lower()
     tables = _parse_schema(schema)
@@ -152,14 +155,6 @@ class GenerateResponse(BaseModel):
     latency_ms: Optional[float] = None
 
 
-def get_device():
-    if torch.cuda.is_available():
-        return "cuda"
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
-
-
 def load_model(adapter_path: str):
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from peft import PeftModel
@@ -187,7 +182,7 @@ def load_model(adapter_path: str):
     return merged, tok, device
 
 
-def generate_sql(mdl, tok, device, question: str, schema: str) -> dict:
+def generate_sql(mdl, tok, device, question: str, schema: str, inference_params: dict | None = None) -> dict:
     prompt = (
         f"[INST] Generate SQL for the following question.\n\n"
         f"Schema:\n{schema}\n\n"
@@ -195,15 +190,22 @@ def generate_sql(mdl, tok, device, question: str, schema: str) -> dict:
     )
     inputs = tok(prompt, return_tensors="pt", truncation=True, max_length=256).to(device)
 
+    params = inference_params or {}
+    max_new_tokens = params.get("max_new_tokens", 256)
+    temperature = params.get("temperature", 0.1)
+    top_p = params.get("top_p", 0.95)
+    do_sample = params.get("do_sample", True)
+    repetition_penalty = params.get("repetition_penalty", 1.15)
+
     start = time.time()
     with torch.no_grad():
         outputs = mdl.generate(
             **inputs,
-            max_new_tokens=256,
-            temperature=0.1,
-            top_p=0.95,
-            do_sample=True,
-            repetition_penalty=1.15,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            do_sample=do_sample,
+            repetition_penalty=repetition_penalty,
             pad_token_id=tok.pad_token_id,
         )
     latency = time.time() - start
@@ -238,9 +240,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Text-to-SQL API", version="1.0.0", lifespan=lifespan)
 
+cors_origins = os.getenv("CORS_ALLOW_ORIGINS", "")
+if cors_origins:
+    allow_origins = [origin.strip() for origin in cors_origins.split(",")]
+elif os.getenv("ENV", "development").lower() == "production":
+    allow_origins = []
+else:
+    allow_origins = ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -259,18 +269,18 @@ async def handle_generate_sql(req: GenerateRequest):
     if not req.schema.strip():
         raise HTTPException(status_code=400, detail="Schema cannot be empty")
 
+    inference_params = getattr(app.state, "inference_params", None)
+
     if model is not None and tokenizer is not None:
-        result = generate_sql(model, tokenizer, app.state.device, req.question, req.schema)
+        result = generate_sql(model, tokenizer, app.state.device, req.question, req.schema, inference_params)
         return GenerateResponse(
             generated_sql=result["generated_sql"],
-            confidence=0.92,
             latency_ms=result["latency_ms"],
         )
 
     sql, latency = _generate_smart_sql(req.question, req.schema)
     return GenerateResponse(
         generated_sql=sql,
-        confidence=0.78,
         latency_ms=latency,
     )
 
@@ -287,5 +297,12 @@ if __name__ == "__main__":
 
     app.state.adapter_path = args.adapter_path
     app.state.config_path = args.config
+
+    if args.config:
+        from configs.config_loader import load_config
+        config = load_config(args.config)
+        app.state.inference_params = config.inference
+    else:
+        app.state.inference_params = None
 
     uvicorn.run(app, host=args.host, port=args.port)

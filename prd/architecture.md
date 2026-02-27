@@ -18,7 +18,7 @@
 ┌─────────────┐ ┌─────────────┐ ┌──────────────┐
 │    DATA     │ │    MODEL    │ │    UTILS     │
 │  pipeline   │ │   loader    │ │   helpers    │
-│  WikiSQL    │ │   LoRA      │ │   seed/time  │
+│  Spider     │ │   LoRA      │ │   seed/time  │
 │  prompts    │ │   LoRA cfg  │ │   device     │
 └──────┬──────┘ └──────┬──────┘ └──────────────┘
        │               │
@@ -49,7 +49,7 @@
 ## 2. Data Flow Diagram
 
 ```
-WikiSQL (HuggingFace)
+Spider (CSV)
        │
        ▼
 ┌──────────────────┐
@@ -88,30 +88,19 @@ WikiSQL (HuggingFace)
 
 ```
 ┌────────────────────────────────────────┐
-│         Mistral-7B (Frozen)            │
+│         TinyLlama-1.1B (Frozen)        │
 │                                        │
 │  ┌──────────────────────────────────┐  │
-│  │  Self-Attention Layers (x32)     │  │
+│  │  Self-Attention Layers (x22)     │  │
 │  │                                  │  │
-│  │  q_proj ──── [LoRA A][LoRA B]   │  │  ◄── Trainable (rank=16)
-│  │  k_proj ──── [LoRA A][LoRA B]   │  │  ◄── Trainable
+│  │  q_proj ──── [LoRA A][LoRA B]   │  │  ◄── Trainable (rank=8)
 │  │  v_proj ──── [LoRA A][LoRA B]   │  │  ◄── Trainable
-│  │  o_proj ──── [LoRA A][LoRA B]   │  │  ◄── Trainable
 │  │                                  │  │
 │  └──────────────────────────────────┘  │
 │                                        │
-│  ┌──────────────────────────────────┐  │
-│  │  MLP Layers (x32)               │  │
-│  │                                  │  │
-│  │  gate_proj ── [LoRA A][LoRA B]  │  │  ◄── Trainable
-│  │  up_proj ──── [LoRA A][LoRA B]  │  │  ◄── Trainable
-│  │  down_proj ── [LoRA A][LoRA B]  │  │  ◄── Trainable
-│  │                                  │  │
-│  └──────────────────────────────────┘  │
-│                                        │
-│  Total: ~7B params                     │
-│  Trainable: ~10M params (0.14%)        │
-│  Quantized: 4-bit NF4                  │
+│  Total: ~1.1B params                   │
+│  Trainable: ~1.1M params (0.10%)       │
+│  Precision: float16                    │
 └────────────────────────────────────────┘
 ```
 
@@ -186,8 +175,8 @@ Training Output (adapter weights)
 - **Multi-node**: Slurm + accelerate launcher
 
 ### Data Scaling
-- **Current**: WikiSQL (~56K train, ~8K val, ~15K test)
-- **Next**: Add Spider (~10K multi-table), BIRD-SQL (~12K real-world)
+- **Current**: Spider (~7K train examples, multi-table)
+- **Next**: Add BIRD-SQL (~12K real-world), WikiSQL (~56K single-table)
 - **Advanced**: Synthetic data generation from schema catalog
 
 ### Model Scaling
@@ -201,6 +190,6 @@ Training Output (adapter weights)
 - **Production**: TGI behind load balancer, adapter hot-swapping
 
 ### Cost Optimization
-- LoRA reduces VRAM from ~28GB (full FT) to ~7.6GB
-- Adapter is ~40MB vs ~14GB for full model
-- Inference: quantized model uses 4x less memory
+- LoRA reduces VRAM from ~4.5GB (full FT) to ~2.5GB
+- Adapter is ~4.5MB vs ~2.2GB for full model
+- Inference: float16 precision with gradient checkpointing

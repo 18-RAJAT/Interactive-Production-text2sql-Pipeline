@@ -13,15 +13,7 @@ from trl import SFTTrainer, SFTConfig
 
 from configs.config_loader import load_config
 from data.pipeline import SpiderCSVPipeline
-from utils.helpers import set_seed, Timer
-
-
-def get_device():
-    if torch.cuda.is_available():
-        return "cuda"
-    if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
+from utils.helpers import set_seed, Timer, get_device
 
 
 def main():
@@ -144,10 +136,16 @@ def main():
 
     resume_path = None
     if args.resume:
+        import re
         ckpt_dir = output_dir / "checkpoints"
-        checkpoints = sorted(ckpt_dir.glob("checkpoint-*"), key=lambda p: int(p.name.split("-")[-1]))
+        checkpoints = []
+        for p in ckpt_dir.glob("checkpoint-*"):
+            match = re.match(r"^checkpoint-(\d+)$", p.name)
+            if match:
+                checkpoints.append((int(match.group(1)), p))
         if checkpoints:
-            resume_path = str(checkpoints[-1])
+            checkpoints.sort(key=lambda x: x[0])
+            resume_path = str(checkpoints[-1][1])
             print(f"  Resuming from: {resume_path}")
         else:
             print("  No checkpoint found, starting fresh")

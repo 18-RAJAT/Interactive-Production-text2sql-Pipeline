@@ -1,0 +1,209 @@
+name: Project Board Automation
+
+on:
+  issues:
+    types: [assigned, unassigned, closed, reopened]
+  pull_request:
+    types: [opened, closed, reopened, ready_for_review]
+
+permissions:
+  issues: write
+  pull-requests: write
+  repository-projects: write
+  contents: read
+
+env:
+  PROJECT_NUMBER: 4
+  # Status field IDs from project board
+  STATUS_FIELD_ID: PVTSSF_lAHOBLQ8TM4BP1jazg-IVkA
+  STATUS_TODO: f75ad846
+  STATUS_IN_PROGRESS: 47fc9ee4
+  STATUS_DONE: 98236657
+
+jobs:
+  update-project-status:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Process Issue Assignment
+        if: github.event_name == 'issues' && github.event.action == 'assigned'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_URL="${{ github.event.issue.html_url }}"
+          ISSUE_NUM="${{ github.event.issue.number }}"
+          
+          echo "Issue #$ISSUE_NUM assigned - moving to In Progress"
+          
+          # Get the project item ID for this issue
+          PROJECT_ITEM=$(gh project item-list "$PROJECT_NUMBER" --owner "${{ github.repository_owner }}" --format json --jq ".items[] | select(.content.number == $ISSUE_NUM) | .id")
+          
+          if [ -n "$PROJECT_ITEM" ]; then
+            # Update status to In Progress
+            gh project item-edit "$PROJECT_NUMBER" \
+              --owner "${{ github.repository_owner }}" \
+              --id "$PROJECT_ITEM" \
+              --field-id "$STATUS_FIELD_ID" \
+              --single-select-option-id "$STATUS_IN_PROGRESS"
+            echo "Updated issue #$ISSUE_NUM to In Progress"
+          else
+            echo "Issue #$ISSUE_NUM not found in project, adding it..."
+            gh project item-add "$PROJECT_NUMBER" \
+              --owner "${{ github.repository_owner }}" \
+              --url "$ISSUE_URL"
+            
+            # Get the new item ID and update status with retry
+            MAX_RETRIES=5
+            RETRY_DELAY=1
+            PROJECT_ITEM=""
+            for i in $(seq 1 $MAX_RETRIES); do
+              PROJECT_ITEM=$(gh project item-list "$PROJECT_NUMBER" --owner "${{ github.repository_owner }}" --format json --jq ".items[] | select(.content.number == $ISSUE_NUM) | .id")
+              if [ -n "$PROJECT_ITEM" ]; then
+                break
+              fi
+              echo "Retry $i/$MAX_RETRIES: Item not found yet, waiting ${RETRY_DELAY}s..."
+              sleep $RETRY_DELAY
+              RETRY_DELAY=$((RETRY_DELAY * 2))
+            done
+            if [ -n "$PROJECT_ITEM" ]; then
+              gh project item-edit "$PROJECT_NUMBER" \
+                --owner "${{ github.repository_owner }}" \
+                --id "$PROJECT_ITEM" \
+                --field-id "$STATUS_FIELD_ID" \
+                --single-select-option-id "$STATUS_IN_PROGRESS"
+            fi
+          fi
+
+      - name: Process Issue Unassignment
+        if: github.event_name == 'issues' && github.event.action == 'unassigned'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_NUM="${{ github.event.issue.number }}"
+          ASSIGNEES_JSON='${{ toJson(github.event.issue.assignees) }}'
+          ASSIGNEES_COUNT=$(echo "$ASSIGNEES_JSON" | jq 'length')
+          
+          # Only move back to Todo if no assignees left
+          if [ "$ASSIGNEES_COUNT" -eq 0 ]; then
+            echo "Issue #$ISSUE_NUM unassigned - moving to Todo"
+            
+            PROJECT_ITEM=$(gh project item-list "$PROJECT_NUMBER" --owner "${{ github.repository_owner }}" --format json --jq ".items[] | select(.content.number == $ISSUE_NUM) | .id")
+            
+            if [ -n "$PROJECT_ITEM" ]; then
+              gh project item-edit "$PROJECT_NUMBER" \
+                --owner "${{ github.repository_owner }}" \
+                --id "$PROJECT_ITEM" \
+                --field-id "$STATUS_FIELD_ID" \
+                --single-select-option-id "$STATUS_TODO"
+              echo "Updated issue #$ISSUE_NUM to Todo"
+            fi
+          fi
+
+      - name: Process Issue Closed
+        if: github.event_name == 'issues' && github.event.action == 'closed'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_NUM="${{ github.event.issue.number }}"
+          
+          echo "Issue #$ISSUE_NUM closed - moving to Done"
+          
+          PROJECT_ITEM=$(gh project item-list "$PROJECT_NUMBER" --owner "${{ github.repository_owner }}" --format json --jq ".items[] | select(.content.number == $ISSUE_NUM) | .id")
+          
+          if [ -n "$PROJECT_ITEM" ]; then
+            gh project item-edit "$PROJECT_NUMBER" \
+              --owner "${{ github.repository_owner }}" \
+              --id "$PROJECT_ITEM" \
+              --field-id "$STATUS_FIELD_ID" \
+              --single-select-option-id "$STATUS_DONE"
+            echo "Updated issue #$ISSUE_NUM to Done"
+          fi
+
+      - name: Process Issue Reopened
+        if: github.event_name == 'issues' && github.event.action == 'reopened'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_NUM="${{ github.event.issue.number }}"
+          
+          echo "Issue #$ISSUE_NUM reopened - moving to In Progress"
+          
+          PROJECT_ITEM=$(gh project item-list "$PROJECT_NUMBER" --owner "${{ github.repository_owner }}" --format json --jq ".items[] | select(.content.number == $ISSUE_NUM) | .id")
+          
+          if [ -n "$PROJECT_ITEM" ]; then
+            gh project item-edit "$PROJECT_NUMBER" \
+              --owner "${{ github.repository_owner }}" \
+              --id "$PROJECT_ITEM" \
+              --field-id "$STATUS_FIELD_ID" \
+              --single-select-option-id "$STATUS_IN_PROGRESS"
+            echo "Updated issue #$ISSUE_NUM to In Progress"
+          fi
+
+  link-pr-to-issues:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract Linked Issues and Update Project
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_STATE: ${{ github.event.action }}
+        run: |
+          echo "Processing PR #$PR_NUMBER"
+          echo "PR State: $PR_STATE"
+          
+          # Extract issue numbers from PR body (fixes #123, closes #456, etc.)
+          ISSUE_NUMBERS=$(echo "$PR_BODY" | grep -oE '(fixes|closes|resolves|fix|close|resolve) #[0-9]+' | grep -oE '[0-9]+' | sort -u || true)
+          
+          if [ -z "$ISSUE_NUMBERS" ]; then
+            echo "No linked issues found in PR description"
+            exit 0
+          fi
+          
+          echo "Found linked issues: $ISSUE_NUMBERS"
+          
+          # Determine target status based on PR state
+          if [ "$PR_STATE" == "closed" ] && [ "${{ github.event.pull_request.merged }}" == "true" ]; then
+            TARGET_STATUS="$STATUS_DONE"
+            STATUS_NAME="Done"
+          elif [ "$PR_STATE" == "opened" ] || [ "$PR_STATE" == "reopened" ] || [ "$PR_STATE" == "ready_for_review" ]; then
+            TARGET_STATUS="$STATUS_IN_PROGRESS"
+            STATUS_NAME="In Progress"
+          else
+            echo "No status update needed for PR state: $PR_STATE"
+            exit 0
+          fi
+          
+          for ISSUE_NUM in $ISSUE_NUMBERS; do
+            echo "Processing issue #$ISSUE_NUM..."
+            
+            # Check if issue exists in project
+            PROJECT_ITEM=$(gh project item-list "$PROJECT_NUMBER" --owner "${{ github.repository_owner }}" --format json --jq ".items[] | select(.content.number == $ISSUE_NUM) | .id")
+            
+            if [ -n "$PROJECT_ITEM" ]; then
+              # Update status
+              gh project item-edit "$PROJECT_NUMBER" \
+                --owner "${{ github.repository_owner }}" \
+                --id "$PROJECT_ITEM" \
+                --field-id "$STATUS_FIELD_ID" \
+                --single-select-option-id "$TARGET_STATUS"
+              echo "Updated issue #$ISSUE_NUM to $STATUS_NAME"
+              
+              # Check for existing comment before adding
+              EXISTING_COMMENT=$(gh issue view "$ISSUE_NUM" --json comments --jq ".comments[] | select(.body | contains(\"PR #$PR_NUMBER\")) | .id" | head -1)
+              if [ -z "$EXISTING_COMMENT" ]; then
+                gh issue comment "$ISSUE_NUM" --body "Linked to PR #$PR_NUMBER: $PR_URL" || true
+              else
+                echo "Comment already exists for PR #$PR_NUMBER on issue #$ISSUE_NUM"
+              fi
+            else
+              echo "Issue #$ISSUE_NUM not found in project"
+            fi
+          done

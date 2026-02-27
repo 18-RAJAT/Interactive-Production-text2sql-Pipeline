@@ -20,8 +20,8 @@ Natural language to SQL translation remains a critical bottleneck in data democr
 
 | Goal | Metric | Target |
 |------|--------|--------|
-| Exact match accuracy | Normalized SQL comparison | > 60% on WikiSQL test |
-| Execution accuracy | Query produces correct results | > 55% on WikiSQL test |
+| Exact match accuracy | Normalized SQL comparison | > 60% on Spider test |
+| Execution accuracy | Query produces correct results | > 55% on Spider test |
 | Training efficiency | GPU hours on single A100 | < 4 hours |
 | Inference latency | Time per query | < 500ms |
 | Model size | Adapter weights | < 100MB |
@@ -32,7 +32,7 @@ Natural language to SQL translation remains a critical bottleneck in data democr
 
 ### In Scope
 
-- WikiSQL dataset processing and prompt formatting
+- Spider dataset processing and prompt formatting
 - SFT + LoRA fine-tuning of TinyLlama-1.1B (configurable base model)
 - Evaluation harness with exact match and execution accuracy
 - Single-query and batch inference
@@ -42,7 +42,6 @@ Natural language to SQL translation remains a critical bottleneck in data democr
 ### Out of Scope (v1)
 
 - Multi-turn conversational SQL generation
-- Cross-database generalization (Spider-level complexity)
 - Production API with authentication/rate limiting
 - Model distillation or ONNX export
 - Web UI (Gradio/Streamlit)
@@ -66,9 +65,9 @@ Natural language to SQL translation remains a critical bottleneck in data democr
 ## 5. Functional Requirements
 
 ### FR-1: Data Pipeline
-- Download WikiSQL from HuggingFace Hub
+- Load Spider dataset from local CSV
 - Parse table schemas (column names, types)
-- Construct human-readable SQL from WikiSQL's structured representation
+- Construct human-readable SQL from Spider's structured representation
 - Format instruction-tuning prompts with schema + question -> SQL
 - Split into train/validation/test
 
@@ -134,7 +133,7 @@ Natural language to SQL translation remains a critical bottleneck in data democr
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| WikiSQL limited complexity | Model won't handle JOINs/subqueries | Extend with Spider dataset in v2 |
+| Spider complexity | Model may struggle with very complex JOINs/subqueries | Iterative training with difficulty-based sampling |
 | Catastrophic forgetting | Base model loses general capability | LoRA preserves base weights frozen |
 | Overfitting on small val set | Inflated accuracy metrics | Use full test split, manual inspection |
 | HuggingFace API rate limits | Data download failures | Cache dataset locally |
@@ -145,7 +144,7 @@ Natural language to SQL translation remains a critical bottleneck in data democr
 
 The project is considered successful when:
 1. Training completes without OOM on a single 24GB GPU
-2. Exact match accuracy exceeds 60% on WikiSQL test set
+2. Exact match accuracy exceeds 60% on Spider test set
 3. Inference latency is under 500ms per query
 4. All components are independently runnable via CLI scripts
 5. Results are fully reproducible from the config file
