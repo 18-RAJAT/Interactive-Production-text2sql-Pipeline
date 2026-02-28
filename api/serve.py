@@ -19,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 
-from utils.helpers import get_device
+from utils.helpers import get_device, confidence_from_scores
 
 model = None
 tokenizer = None
@@ -224,33 +224,6 @@ def load_model(adapter_path: str):
     return merged, tok, device
 
 
-def _confidence_from_scores(
-    scores: tuple, generated_ids: torch.Tensor
-) -> float:
-    """Derive a 0-1 confidence score from per-token logits.
-
-    Uses the geometric mean of token probabilities (exp of mean log-prob)
-    as the primary signal, with min token probability as a floor clamp.
-    """
-    log_probs = []
-    for step_idx, logits in enumerate(scores):
-        probs = F.log_softmax(logits[0].float(), dim=-1)
-        token_id = generated_ids[step_idx]
-        log_probs.append(probs[token_id].item())
-
-    if not log_probs:
-        return 0.0
-
-    mean_lp = sum(log_probs) / len(log_probs)
-    min_lp = min(log_probs)
-
-    avg_conf = math.exp(mean_lp)
-    min_conf = math.exp(min_lp)
-    confidence = 0.8 * avg_conf + 0.2 * min_conf
-    return round(max(0.0, min(1.0, confidence)), 4)
-
-
-
 def generate_sql(mdl, tok, device, question: str, schema: str, inference_params: dict | None = None) -> dict:
     prompt = (
         f"[INST] Generate SQL for the following question.\n\n"
@@ -282,7 +255,7 @@ def generate_sql(mdl, tok, device, question: str, schema: str, inference_params:
     latency = time.time() - start
 
     generated_ids = outputs.sequences[0][inputs["input_ids"].shape[-1]:]
-    confidence = _confidence_from_scores(outputs.scores, generated_ids)
+    confidence = confidence_from_scores(outputs.scores, generated_ids)
 
     full_output = tok.decode(outputs.sequences[0], skip_special_tokens=True)
     if "[/INST]" in full_output:
@@ -341,7 +314,7 @@ async def health():
 
 
 def _is_meaningful_question(text: str) -> bool:
-    """Return True if the text contains at least two word characters (letters/digits)."""
+    """Return True if the text contains at least one word with 2+ letters."""
     words = re.findall(r'[a-zA-Z]{2,}', text)
     return len(words) >= 1
 

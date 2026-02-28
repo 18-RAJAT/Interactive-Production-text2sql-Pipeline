@@ -1,14 +1,13 @@
 """Inference engine: load fine-tuned model and generate SQL from natural language + schema."""
 
-import math
 import time
 
 import torch
-import torch.nn.functional as F
 from typing import Any, Dict, List, Optional, TypedDict
 
 from configs.config_loader import Config
 from models.loader import ModelLoader
+from utils.helpers import confidence_from_scores
 
 
 class GenerationResult(TypedDict):
@@ -62,28 +61,6 @@ class InferenceEngine:
             f"Question:\n{question} [/INST]\n"
         )
 
-    @staticmethod
-    def _confidence_from_scores(
-        scores: tuple, generated_ids: torch.Tensor
-    ) -> float:
-        """Derive a 0-1 confidence from per-token logits via geometric mean probability."""
-        log_probs = []
-        for step_idx, logits in enumerate(scores):
-            lp = F.log_softmax(logits[0].float(), dim=-1)
-            token_id = generated_ids[step_idx]
-            log_probs.append(lp[token_id].item())
-
-        if not log_probs:
-            return 0.0
-
-        mean_lp = sum(log_probs) / len(log_probs)
-        min_lp = min(log_probs)
-
-        avg_conf = math.exp(mean_lp)
-        min_conf = math.exp(min_lp)
-        confidence = 0.8 * avg_conf + 0.2 * min_conf
-        return round(max(0.0, min(1.0, confidence)), 4)
-
     def generate(self, question: str, schema: str) -> GenerationResult:
         """
         Generate a SQL query from a natural language question given a database schema using the loaded model.
@@ -112,7 +89,7 @@ class InferenceEngine:
         latency = time.time() - start
 
         generated_ids = outputs.sequences[0][inputs["input_ids"].shape[-1]:]
-        confidence = self._confidence_from_scores(outputs.scores, generated_ids)
+        confidence = confidence_from_scores(outputs.scores, generated_ids)
 
         full_output = self.tokenizer.decode(outputs.sequences[0], skip_special_tokens=True)
         if "[/INST]" in full_output:
