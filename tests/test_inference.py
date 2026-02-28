@@ -63,7 +63,7 @@ class TestInferenceEngine:
         mock_inputs = {"input_ids": input_ids}
         mock_inputs_obj = MagicMock()
         mock_inputs_obj.to.return_value = mock_inputs
-        mock_inputs_obj.__getitem__ = lambda self, key: mock_inputs[key]
+        mock_inputs_obj.__getitem__ = lambda _, key: mock_inputs[key]
         mock_tokenizer.return_value = mock_inputs_obj
         mock_tokenizer.pad_token_id = 0
         mock_tokenizer.decode.return_value = "blah [/INST]\nSELECT COUNT(*) FROM t;"
