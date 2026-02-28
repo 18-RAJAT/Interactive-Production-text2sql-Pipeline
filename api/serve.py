@@ -239,6 +239,7 @@ def _confidence_from_scores(
     return round(max(0.0, min(1.0, confidence)), 4)
 
 
+
 def generate_sql(mdl, tok, device, question: str, schema: str, inference_params: dict | None = None) -> dict:
     prompt = (
         f"[INST] Generate SQL for the following question.\n\n"
