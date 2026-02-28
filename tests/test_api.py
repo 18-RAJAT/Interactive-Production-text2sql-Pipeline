@@ -45,6 +45,19 @@ class TestGenerateSQLEndpoint:
             "schema": "CREATE TABLE t (id INTEGER)",
         }).json()
         assert "confidence" in data
+        assert isinstance(data["confidence"], float)
+        assert 0.0 <= data["confidence"] <= 1.0
+
+    def test_confidence_varies_by_pattern_strength(self, client):
+        strong = client.post("/generate_sql", json={
+            "question": "How many rows are there?",
+            "schema": "CREATE TABLE employees (id INTEGER, name TEXT, salary REAL)",
+        }).json()
+        weak = client.post("/generate_sql", json={
+            "question": "xyz",
+            "schema": "CREATE TABLE t (id INTEGER)",
+        }).json()
+        assert strong["confidence"] > weak["confidence"]
 
     def test_response_has_latency(self, client):
         data = client.post("/generate_sql", json={

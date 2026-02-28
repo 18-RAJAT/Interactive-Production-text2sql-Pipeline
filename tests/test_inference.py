@@ -1,4 +1,5 @@
 import pytest
+import torch
 from unittest.mock import patch, MagicMock
 from inference.engine import InferenceEngine
 
@@ -53,13 +54,26 @@ class TestInferenceEngine:
         mock_param.device = "cpu"
         mock_model.parameters.return_value = iter([mock_param])
 
-        mock_inputs = MagicMock()
-        mock_inputs.to.return_value = mock_inputs
-        mock_tokenizer.return_value = mock_inputs
+        prompt_len = 5
+        gen_len = 3
+        input_ids = torch.randint(0, 100, (1, prompt_len))
+        gen_tokens = torch.randint(0, 100, (1, gen_len))
+        full_seq = torch.cat([input_ids, gen_tokens], dim=-1)
+
+        mock_inputs = {"input_ids": input_ids}
+        mock_inputs_obj = MagicMock()
+        mock_inputs_obj.to.return_value = mock_inputs
+        mock_inputs_obj.__getitem__ = lambda self, key: mock_inputs[key]
+        mock_tokenizer.return_value = mock_inputs_obj
         mock_tokenizer.pad_token_id = 0
         mock_tokenizer.decode.return_value = "blah [/INST]\nSELECT COUNT(*) FROM t;"
 
-        mock_model.generate.return_value = [MagicMock()]
+        vocab_size = 200
+        mock_scores = tuple(torch.randn(1, vocab_size) for _ in range(gen_len))
+        mock_output = MagicMock()
+        mock_output.sequences = full_seq
+        mock_output.scores = mock_scores
+        mock_model.generate.return_value = mock_output
 
         mock_loader.load_for_inference.return_value = (mock_model, mock_tokenizer)
         mock_loader_cls.return_value = mock_loader
@@ -78,3 +92,6 @@ class TestInferenceEngine:
         assert "question" in result
         assert "schema" in result
         assert "latency_ms" in result
+        assert "confidence" in result
+        assert isinstance(result["confidence"], float)
+        assert 0.0 <= result["confidence"] <= 1.0
