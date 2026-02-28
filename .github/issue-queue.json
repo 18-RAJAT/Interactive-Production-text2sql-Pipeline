@@ -95,7 +95,8 @@
     "title": "Confidence scoring via log-probabilities",
     "body": "Implement real confidence scores using token-level log probabilities (average/min) instead of the hardcoded mock value. The frontend already displays confidence badges.",
     "priority": "P0 - Critical",
-    "category": "Inference & API"
+    "category": "Inference & API",
+    "status": "done"
   },
   {
     "day": 3,

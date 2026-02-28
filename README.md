@@ -125,6 +125,17 @@ python scripts/infer.py --adapter_path ./outputs/spider/final_model \
 python scripts/infer.py --adapter_path ./outputs/spider/final_model --interactive
 ```
 
+## Confidence Scoring
+
+Every API response includes a `confidence` score (0.0 - 1.0) derived from token-level log probabilities:
+
+| Mode | Method |
+|------|--------|
+| **Model inference** | Geometric mean of per-token probabilities (80%) blended with minimum token probability (20%), computed from `output_scores` logits |
+| **Mock / rule-based** | Heuristic based on schema parseability, question pattern strength, and column-name overlap |
+
+The frontend displays confidence as a color-coded badge (green >= 80%, amber >= 50%, red < 50%).
+
 ## Technical Details
 
 ### LoRA Configuration

@@ -10,7 +10,10 @@ from contextlib import asynccontextmanager
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import math
+
 import torch
+import torch.nn.functional as F
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -43,7 +46,34 @@ def _parse_schema(schema: str) -> list[tuple[str, list[str]]]:
     return tables
 
 
-def _generate_smart_sql(question: str, schema: str) -> tuple[str, float]:
+def _mock_confidence(question: str, schema: str, sql: str) -> float:
+    """Heuristic confidence for rule-based mock mode (no model loaded).
+
+    Scores higher when the schema has parseable tables and the question
+    matches a clear pattern; scores lower for fallback/generic queries.
+    """
+    score = 0.5
+    tables = _parse_schema(schema)
+    if tables:
+        score += 0.15
+    q = question.lower()
+    strong_patterns = [
+        r'\bhow many\b', r'\baverage\b|\bavg\b', r'\bmax\b|\bmaximum\b',
+        r'\bmin\b|\bminimum\b', r'\bsum\b|\btotal\b', r'\blist\b|\bshow\b|\bfind\b',
+        r'\bhighest\b|\blowest\b', r'\bgroup\b|\beach\b|\bper\b',
+    ]
+    for pat in strong_patterns:
+        if re.search(pat, q):
+            score += 0.15
+            break
+    if tables and any(col.lower() in q for _, cols in tables for col in cols):
+        score += 0.1
+    if "SELECT" in sql and "FROM" in sql:
+        score += 0.05
+    return round(min(1.0, score), 4)
+
+
+def _generate_smart_sql(question: str, schema: str) -> tuple[str, float, float]:
     start = time.time()
     q = question.lower()
     tables = _parse_schema(schema)
@@ -140,7 +170,8 @@ def _generate_smart_sql(question: str, schema: str) -> tuple[str, float]:
         sql += ";"
 
     latency = round((time.time() - start) * 1000, 2)
-    return sql, latency
+    confidence = _mock_confidence(question, schema, sql)
+    return sql, latency, confidence
 
 
 class GenerateRequest(BaseModel):
@@ -182,6 +213,32 @@ def load_model(adapter_path: str):
     return merged, tok, device
 
 
+def _confidence_from_scores(
+    scores: tuple, generated_ids: torch.Tensor
+) -> float:
+    """Derive a 0-1 confidence score from per-token logits.
+
+    Uses the geometric mean of token probabilities (exp of mean log-prob)
+    as the primary signal, with min token probability as a floor clamp.
+    """
+    log_probs = []
+    for step_idx, logits in enumerate(scores):
+        probs = F.log_softmax(logits[0].float(), dim=-1)
+        token_id = generated_ids[step_idx]
+        log_probs.append(probs[token_id].item())
+
+    if not log_probs:
+        return 0.0
+
+    mean_lp = sum(log_probs) / len(log_probs)
+    min_lp = min(log_probs)
+
+    avg_conf = math.exp(mean_lp)
+    min_conf = math.exp(min_lp)
+    confidence = 0.8 * avg_conf + 0.2 * min_conf
+    return round(max(0.0, min(1.0, confidence)), 4)
+
+
 def generate_sql(mdl, tok, device, question: str, schema: str, inference_params: dict | None = None) -> dict:
     prompt = (
         f"[INST] Generate SQL for the following question.\n\n"
@@ -207,10 +264,15 @@ def generate_sql(mdl, tok, device, question: str, schema: str, inference_params:
             do_sample=do_sample,
             repetition_penalty=repetition_penalty,
             pad_token_id=tok.pad_token_id,
+            output_scores=True,
+            return_dict_in_generate=True,
         )
     latency = time.time() - start
 
-    full_output = tok.decode(outputs[0], skip_special_tokens=True)
+    generated_ids = outputs.sequences[0][inputs["input_ids"].shape[-1]:]
+    confidence = _confidence_from_scores(outputs.scores, generated_ids)
+
+    full_output = tok.decode(outputs.sequences[0], skip_special_tokens=True)
     if "[/INST]" in full_output:
         sql = full_output.split("[/INST]")[-1].strip()
     else:
@@ -220,7 +282,11 @@ def generate_sql(mdl, tok, device, question: str, schema: str, inference_params:
     if sql and not sql.endswith(";"):
         sql += ";"
 
-    return {"generated_sql": sql, "latency_ms": round(latency * 1000, 2)}
+    return {
+        "generated_sql": sql,
+        "confidence": confidence,
+        "latency_ms": round(latency * 1000, 2),
+    }
 
 
 @asynccontextmanager
@@ -275,12 +341,14 @@ async def handle_generate_sql(req: GenerateRequest):
         result = generate_sql(model, tokenizer, app.state.device, req.question, req.schema, inference_params)
         return GenerateResponse(
             generated_sql=result["generated_sql"],
+            confidence=result["confidence"],
             latency_ms=result["latency_ms"],
         )
 
-    sql, latency = _generate_smart_sql(req.question, req.schema)
+    sql, latency, confidence = _generate_smart_sql(req.question, req.schema)
     return GenerateResponse(
         generated_sql=sql,
+        confidence=confidence,
         latency_ms=latency,
     )
 
