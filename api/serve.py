@@ -52,25 +52,36 @@ def _mock_confidence(question: str, schema: str, sql: str) -> float:
     Scores higher when the schema has parseable tables and the question
     matches a clear pattern; scores lower for fallback/generic queries.
     """
-    score = 0.5
+    q = question.lower()
+    words = re.findall(r'[a-zA-Z]{2,}', q)
+    if len(words) < 2:
+        return 0.15
+
+    score = 0.35
     tables = _parse_schema(schema)
     if tables:
-        score += 0.15
-    q = question.lower()
+        score += 0.1
     strong_patterns = [
         r'\bhow many\b', r'\baverage\b|\bavg\b', r'\bmax\b|\bmaximum\b',
         r'\bmin\b|\bminimum\b', r'\bsum\b|\btotal\b', r'\blist\b|\bshow\b|\bfind\b',
         r'\bhighest\b|\blowest\b', r'\bgroup\b|\beach\b|\bper\b',
+        r'\bwhat\b', r'\bwhich\b', r'\bwhere\b', r'\bwho\b',
     ]
+    matched_pattern = False
     for pat in strong_patterns:
         if re.search(pat, q):
-            score += 0.15
+            score += 0.2
+            matched_pattern = True
             break
+    if not matched_pattern:
+        score -= 0.1
     if tables and any(col.lower() in q for _, cols in tables for col in cols):
-        score += 0.1
+        score += 0.15
+    if len(words) >= 5:
+        score += 0.05
     if "SELECT" in sql and "FROM" in sql:
         score += 0.05
-    return round(min(1.0, score), 4)
+    return round(max(0.0, min(1.0, score)), 4)
 
 
 def _generate_smart_sql(question: str, schema: str) -> tuple[str, float, float]:
@@ -329,12 +340,23 @@ async def health():
     return {"status": "ok", "model_loaded": model is not None}
 
 
+def _is_meaningful_question(text: str) -> bool:
+    """Return True if the text contains at least two word characters (letters/digits)."""
+    words = re.findall(r'[a-zA-Z]{2,}', text)
+    return len(words) >= 1
+
+
 @app.post("/generate_sql", response_model=GenerateResponse)
 async def handle_generate_sql(req: GenerateRequest):
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="Question cannot be empty")
     if not req.schema.strip():
         raise HTTPException(status_code=400, detail="Schema cannot be empty")
+    if not _is_meaningful_question(req.question):
+        raise HTTPException(
+            status_code=400,
+            detail="Question must contain at least one meaningful word (2+ letters)",
+        )
 
     inference_params = getattr(app.state, "inference_params", None)
 

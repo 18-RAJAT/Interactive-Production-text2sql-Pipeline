@@ -87,6 +87,21 @@ class TestGenerateSQLEndpoint:
         })
         assert resp.status_code == 400
 
+    def test_punctuation_only_question_returns_400(self, client):
+        for q in [".", "-", "!!!", "...", "---", "?", ",,", "@#$"]:
+            resp = client.post("/generate_sql", json={
+                "question": q,
+                "schema": "CREATE TABLE t (id INTEGER)",
+            })
+            assert resp.status_code == 400, f"Expected 400 for question={q!r}, got {resp.status_code}"
+
+    def test_single_char_question_returns_400(self, client):
+        resp = client.post("/generate_sql", json={
+            "question": "x",
+            "schema": "CREATE TABLE t (id INTEGER)",
+        })
+        assert resp.status_code == 400
+
     def test_missing_question_returns_422(self, client):
         resp = client.post("/generate_sql", json={
             "schema": "CREATE TABLE t (id INTEGER)",
