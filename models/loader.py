@@ -1,4 +1,4 @@
-"""Model loading with QLoRA quantization and LoRA adapter configuration."""
+"""Model loading with quantization and LoRA adapter configuration."""
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig

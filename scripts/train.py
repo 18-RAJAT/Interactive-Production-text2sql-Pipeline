@@ -1,4 +1,4 @@
-"""Main training script: data loading -> model setup -> QLoRA fine-tuning."""
+"""Main training script: data loading -> model setup -> LoRA fine-tuning."""
 
 import sys
 import argparse
@@ -14,7 +14,7 @@ from utils.helpers import set_seed, get_device_info, Timer
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Fine-tune LLM on WikiSQL with QLoRA")
+    parser = argparse.ArgumentParser(description="Fine-tune LLM on WikiSQL with LoRA")
     parser.add_argument("--config", type=str, default=None, help="Path to config YAML")
     parser.add_argument("--max_train_samples", type=int, default=None)
     parser.add_argument("--max_val_samples", type=int, default=None)

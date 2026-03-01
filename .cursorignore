@@ -1,0 +1,12 @@
+venv/
+.venv/
+env/
+node_modules/
+__pycache__/
+*.pyc
+.git/
+outputs/
+wandb/
+*.pt
+*.bin
+*.safetensors
