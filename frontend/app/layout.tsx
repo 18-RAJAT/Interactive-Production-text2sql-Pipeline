@@ -7,7 +7,7 @@ import "@/styles/globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Text-to-SQL | QLoRA Fine-Tuned Generator",
+  title: "Text-to-SQL | LoRA Fine-Tuned Generator",
   description: "Generate SQL queries from natural language using a fine-tuned LLM",
 };
 

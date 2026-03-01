@@ -24,7 +24,7 @@ export function Header({ connected }: HeaderProps) {
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Text-to-SQL</h1>
           <p className="text-xs text-muted-foreground">
-            QLoRA Fine-Tuned Generator
+            LoRA Fine-Tuned Generator
           </p>
         </div>
       </div>
