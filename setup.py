@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
     name="text-to-sql-finetuning",
     version="1.0.0",
-    description="Fine-tune LLMs for Text-to-SQL generation using QLoRA on WikiSQL",
+    description="Fine-tune LLMs for Text-to-SQL generation using LoRA on WikiSQL",
     author="Rajat Joshi",
     python_requires=">=3.10",
     packages=find_packages(),
