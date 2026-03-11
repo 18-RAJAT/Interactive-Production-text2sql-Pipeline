@@ -17,6 +17,20 @@
     --primary-foreground: 0 0% 100%;
     --destructive: 0 84% 60%;
     --radius: 0.625rem;
+
+    --claude-bg-0: #FAF9F5;
+    --claude-bg-000: #FAF9F5;
+    --claude-bg-100: #FFFFFF;
+    --claude-bg-200: #F0EEE6;
+    --claude-bg-300: #DDDDDD;
+    --claude-text-100: #1F1E1D;
+    --claude-text-200: #3D3D3A;
+    --claude-text-300: #73726C;
+    --claude-text-400: #888888;
+    --claude-text-500: #999999;
+    --claude-accent: #D97757;
+    --claude-accent-hover: #C6613F;
+    --claude-ease-silk: cubic-bezier(0.2, 0.0, 0, 1.0);
   }
 
   .dark {
@@ -33,6 +47,19 @@
     --primary-foreground: 0 0% 100%;
     --destructive: 0 62% 50%;
     --radius: 0.625rem;
+
+    --claude-bg-0: #212121;
+    --claude-bg-000: #212121;
+    --claude-bg-100: #262624;
+    --claude-bg-200: #30302E;
+    --claude-bg-300: #454540;
+    --claude-text-100: #ECECEC;
+    --claude-text-200: #E1E1E0;
+    --claude-text-300: #B4B4B4;
+    --claude-text-400: #8A8A88;
+    --claude-text-500: #6B6B65;
+    --claude-accent: #D2996E;
+    --claude-accent-hover: #E5AA7F;
   }
 
   * {
@@ -61,5 +88,31 @@
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background-color: hsl(var(--muted-foreground) / 0.3);
     border-radius: 3px;
+  }
+
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(136, 136, 136, 0.3) transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background-color: rgba(136, 136, 136, 0.3);
+    border-radius: 2px;
+  }
+
+  .line-clamp-4 {
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 }
