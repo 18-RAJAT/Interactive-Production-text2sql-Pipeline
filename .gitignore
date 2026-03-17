@@ -18,3 +18,5 @@ wandb/
 .idea/
 *.swp
 .DS_Store
+venv/
+venv/
