@@ -75,7 +75,20 @@ def _mock_confidence(question: str, schema: str, sql: str) -> float:
             break
     if not matched_pattern:
         score -= 0.1
-    if tables and any(col.lower() in q for _, cols in tables for col in cols):
+    if tables:
+        table_names = [t.lower() for t, _ in tables]
+        if any(re.search(rf'\b{re.escape(t)}\b', q) for t in table_names):
+            score += 0.15
+        elif any(
+            re.search(rf'\b{re.escape(v)}\b', q)
+            for t in table_names
+            for v in (t.rstrip("s") if t.endswith("s") and not t.endswith("ss") else t, t + "s")
+        ):
+            score += 0.10
+        else:
+            score -= 0.15
+
+    if tables and any(re.search(rf'\b{re.escape(col.lower())}\b', q) for _, cols in tables for col in cols):
         score += 0.15
     if len(words) >= 5:
         score += 0.05
