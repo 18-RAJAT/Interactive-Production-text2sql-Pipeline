@@ -5,21 +5,24 @@ import sys
 import time
 import argparse
 import os
+import math
 from pathlib import Path
 from contextlib import asynccontextmanager
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import math
-
-import torch
-import torch.nn.functional as F
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional
 
-from utils.helpers import get_device, confidence_from_scores
+try:
+    import torch
+    import torch.nn.functional as F
+    from utils.helpers import get_device, confidence_from_scores
+    HAS_TORCH = True
+except ImportError:
+    HAS_TORCH = False
 
 model = None
 tokenizer = None
@@ -356,11 +359,14 @@ async def lifespan(app: FastAPI):
     global model, tokenizer
     adapter_path = getattr(app.state, "adapter_path", None)
     if adapter_path:
-        mdl, tok, dev = load_model(adapter_path)
-        model = mdl
-        tokenizer = tok
-        app.state.device = dev
-        print("Ready for inference.")
+        if not HAS_TORCH:
+            print("WARNING: torch not installed. Cannot load model. Running in mock mode.")
+        else:
+            mdl, tok, dev = load_model(adapter_path)
+            model = mdl
+            tokenizer = tok
+            app.state.device = dev
+            print("Ready for inference.")
     else:
         print("Running in mock mode (no --adapter_path). Use --adapter_path for real inference.")
     yield
@@ -433,7 +439,7 @@ if __name__ == "__main__":
     parser.add_argument("--adapter_path", type=str, default=None)
     parser.add_argument("--config", type=str, default=None)
     parser.add_argument("--host", type=str, default="0.0.0.0")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=int, default=int(os.getenv("PORT", "8000")))
     args = parser.parse_args()
 
     app.state.adapter_path = args.adapter_path
