@@ -34,7 +34,7 @@ export async function generateSQL(
 
 export async function checkHealth(): Promise<boolean> {
   try {
-    await client.get("/health", { timeout: 3000 });
+    await client.get("/health", { timeout: 60000 });
     return true;
   } catch {
     return false;
