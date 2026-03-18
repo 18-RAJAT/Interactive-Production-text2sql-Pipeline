@@ -130,7 +130,82 @@ def _generate_smart_sql(question: str, schema: str) -> tuple[str, float, float]:
 
     is_ranked = re.search(r'\bnth\b|\brank\b|\btop\s+\d|\b\d+(?:st|nd|rd|th)\s+(?:highest|lowest|largest|smallest)', q)
 
-    if is_ranked or (re.search(r'\bhighest\b|\blowest\b', q) and re.search(r'\bfind\b|\bget\b|\bwhat is\b', q)):
+    def _detect_join(q: str, tables: list) -> str | None:
+        """Detect if the question references multiple tables, returning JOIN SQL or None."""
+        if len(tables) < 2:
+            return None
+        all_names = {t.lower(): (t, cols) for t, cols in tables}
+        singular_map = {}
+        for t, cols in tables:
+            tl = t.lower()
+            singular_map[tl] = (t, cols)
+            if tl.endswith("s") and not tl.endswith("ss"):
+                singular_map[tl.rstrip("s")] = (t, cols)
+            singular_map[tl + "s"] = (t, cols)
+
+        referenced = []
+        for variant, (orig, cols) in singular_map.items():
+            if re.search(rf'\b{re.escape(variant)}\b', q) and orig not in [r[0] for r in referenced]:
+                referenced.append((orig, cols))
+
+        join_hint = re.search(
+            r'\bwith\b|\balong with\b|\band their\b|\bincluding\b|\bjoin\b|\bcombine\b', q
+        )
+        if len(referenced) < 2 and not join_hint:
+            return None
+        if len(referenced) < 2 and join_hint and len(tables) >= 2:
+            referenced = [(t, c) for t, c in tables[:2]]
+
+        t1, c1 = referenced[0]
+        t2, c2 = referenced[1]
+
+        join_col = None
+        for c in c2:
+            if c.lower().endswith("_id"):
+                ref = c.lower().replace("_id", "")
+                if ref == t1.lower() or ref == t1.lower().rstrip("s") or ref + "s" == t1.lower():
+                    join_col = c
+                    break
+        if not join_col:
+            for c in c1:
+                if c.lower().endswith("_id"):
+                    ref = c.lower().replace("_id", "")
+                    if ref == t2.lower() or ref == t2.lower().rstrip("s") or ref + "s" == t2.lower():
+                        t1, c1, t2, c2 = t2, c2, t1, c1
+                        join_col = c
+                        break
+        if not join_col:
+            join_col = c2[0] if c2 else "id"
+
+        non_id_c1 = [c for c in c1 if c.lower() != "id" and not c.lower().endswith("_id")]
+        non_id_c2 = [c for c in c2 if c.lower() != "id" and not c.lower().endswith("_id")]
+        sel_parts = [f"{t1}.{c}" for c in non_id_c1[:3]] + [f"{t2}.{c}" for c in non_id_c2[:2]]
+        select_cols = ", ".join(sel_parts) if sel_parts else f"{t1}.*, {t2}.*"
+
+        if re.search(r'\bleft join\b|\ball\s+\w+\s+with\b|\bincluding those without\b|\bif any\b', q):
+            join_type = "LEFT JOIN"
+        elif re.search(r'\bright join\b', q):
+            join_type = "RIGHT JOIN"
+        elif re.search(r'\bfull join\b|\bfull outer\b', q):
+            join_type = "FULL OUTER JOIN"
+        elif re.search(r'\bcross join\b|\ball combinations\b|\bcartesian\b', q):
+            join_type = "CROSS JOIN"
+        elif re.search(r'\binner join\b', q):
+            join_type = "INNER JOIN"
+        else:
+            join_type = "JOIN"
+
+        on_left = f"{t1}.id"
+        on_right = f"{t2}.{join_col}"
+        if join_type == "CROSS JOIN":
+            return f"SELECT {select_cols} FROM {t1} CROSS JOIN {t2}"
+        return f"SELECT {select_cols} FROM {t1} {join_type} {t2} ON {on_left} = {on_right}"
+
+    join_sql = _detect_join(q, tables)
+
+    if join_sql:
+        sql = join_sql
+    elif is_ranked or (re.search(r'\bhighest\b|\blowest\b', q) and re.search(r'\bfind\b|\bget\b|\bwhat is\b', q)):
         is_asc = bool(re.search(r'\blowest\b|\bsmallest\b|\bleast\b', q))
         order = "ASC" if is_asc else "DESC"
         target_col = agg_col
@@ -161,8 +236,7 @@ def _generate_smart_sql(question: str, schema: str) -> tuple[str, float, float]:
         sql = f"SELECT {group_col}, COUNT(*) FROM {table_name} GROUP BY {group_col}"
     elif re.search(r'\blist\b|\bshow\b|\bfind\b|\bget\b|\bwhat\b|\bname\b|\bdisplay\b', q):
         select_cols = ", ".join(columns[:4]) if len(columns) > 1 else "*"
-        if re.search(r'where|with|that|which|whose|more than|less than|greater|equal|above|below', q):
-            sql = f"SELECT {select_cols} FROM {table_name} WHERE {agg_col} IS NOT NULL"
+        if re.search(r'more than|less than|greater|equal|above|below', q):
             num_match = re.search(r'(?:more than|greater than|above|over|>)\s*(\d+)', q)
             if num_match:
                 sql = f"SELECT {select_cols} FROM {table_name} WHERE {agg_col} > {num_match.group(1)}"
@@ -170,22 +244,12 @@ def _generate_smart_sql(question: str, schema: str) -> tuple[str, float, float]:
                 num_match = re.search(r'(?:less than|below|under|<)\s*(\d+)', q)
                 if num_match:
                     sql = f"SELECT {select_cols} FROM {table_name} WHERE {agg_col} < {num_match.group(1)}"
+                else:
+                    sql = f"SELECT {select_cols} FROM {table_name} WHERE {agg_col} IS NOT NULL"
         else:
             sql = f"SELECT {select_cols} FROM {table_name}"
             if re.search(r'\border\b|\bsort\b', q):
                 sql += f" ORDER BY {agg_col} DESC"
-    elif len(tables) > 1:
-        t1, c1 = tables[0]
-        t2, c2 = tables[1]
-        join_col = None
-        for c in c2:
-            if c.lower().endswith("_id") and c.lower().replace("_id", "") == t1.lower().rstrip("s"):
-                join_col = c
-                break
-        if not join_col:
-            join_col = c2[0] if c2 else "id"
-        select_cols = ", ".join(f"{t1}.{c}" for c in c1[:2])
-        sql = f"SELECT {select_cols} FROM {t1} JOIN {t2} ON {t1}.id = {t2}.{join_col}"
     else:
         select_cols = ", ".join(columns[:4]) if len(columns) > 1 else "*"
         sql = f"SELECT {select_cols} FROM {table_name}"
