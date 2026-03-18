@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: text-to-sql-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r api/requirements-render.txt
+    startCommand: uvicorn api.serve:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: ENV
+        value: production
+      - key: CORS_ALLOW_ORIGINS
+        sync: false
