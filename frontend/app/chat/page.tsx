@@ -31,7 +31,7 @@ export default function ChatPage() {
     const userName = "Rajat";
 
     return (
-        <div className="min-h-screen w-full bg-claude-bg-0 flex flex-col items-center justify-center p-4 font-sans text-claude-text-100 transition-colors duration-200">
+        <div className="min-h-[calc(100vh-49px)] w-full bg-claude-bg-0 flex flex-col items-center justify-center p-4 font-sans text-claude-text-100 transition-colors duration-200">
             <div className="w-full max-w-3xl mb-8 sm:mb-12 text-center animate-claude-fade-in">
                 <div className="w-24 h-24 mx-auto mb-6 flex items-center justify-center">
                     <svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
