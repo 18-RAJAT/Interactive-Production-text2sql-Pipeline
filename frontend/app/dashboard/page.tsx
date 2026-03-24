@@ -1,8 +1,13 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { PanelLeftClose, PanelLeft } from "lucide-react";
-import { Header } from "@/components/Header";
+import {
+  PanelLeftClose,
+  PanelLeft,
+  Wifi,
+  WifiOff,
+  Database,
+} from "lucide-react";
 import { SchemaEditor } from "@/components/SchemaEditor";
 import { QueryInput } from "@/components/QueryInput";
 import { SQLOutput } from "@/components/SQLOutput";
@@ -56,8 +61,48 @@ export default function DashboardPage() {
   );
 
   return (
-    <div className="flex flex-col h-screen">
-      <Header connected={connected} />
+    <div className="flex flex-col h-[calc(100vh-49px)] bg-background">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b bg-card">
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="p-1.5 rounded-lg hover:bg-muted transition-colors text-muted-foreground"
+            aria-label="Toggle sidebar"
+          >
+            {sidebarOpen ? (
+              <PanelLeftClose className="w-4 h-4" />
+            ) : (
+              <PanelLeft className="w-4 h-4" />
+            )}
+          </button>
+          <div className="hidden sm:flex items-center gap-2">
+            <Database className="w-4 h-4 text-primary" />
+            <span className="text-sm font-semibold text-foreground">
+              SQL Workspace
+            </span>
+          </div>
+        </div>
+
+        <div
+          className={cn(
+            "flex items-center gap-2 text-xs font-medium px-3 py-1.5 rounded-full transition-colors",
+            connected === true && "bg-emerald-50 text-emerald-600 ring-1 ring-emerald-200/60",
+            connected === false && "bg-red-50 text-red-500 ring-1 ring-red-200/60",
+            connected === null && "bg-muted text-muted-foreground ring-1 ring-border"
+          )}
+        >
+          {connected === true ? (
+            <Wifi className="w-3.5 h-3.5" />
+          ) : (
+            <WifiOff className="w-3.5 h-3.5" />
+          )}
+          {connected === true
+            ? "Connected"
+            : connected === false
+            ? "Offline"
+            : "Checking..."}
+        </div>
+      </div>
 
       <div className="flex flex-1 overflow-hidden">
         <aside
@@ -74,37 +119,21 @@ export default function DashboardPage() {
           />
         </aside>
 
-        <main className="flex-1 flex flex-col overflow-hidden">
-          <div className="px-4 pt-3">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-1.5 rounded-md hover:bg-muted transition-colors text-muted-foreground"
-              aria-label="Toggle sidebar"
-            >
-              {sidebarOpen ? (
-                <PanelLeftClose className="w-4 h-4" />
-              ) : (
-                <PanelLeft className="w-4 h-4" />
-              )}
-            </button>
+        <main className="flex-1 flex overflow-hidden">
+          <div className="w-[45%] border-r flex flex-col overflow-hidden bg-card">
+            <SchemaEditor value={schema} onChange={setSchema} />
           </div>
 
-          <div className="flex-1 flex overflow-hidden">
-            <div className="w-[45%] border-r flex flex-col overflow-hidden">
-              <SchemaEditor value={schema} onChange={setSchema} />
-            </div>
-
-            <div className="flex-1 flex flex-col overflow-hidden">
-              <div className="flex-1 overflow-y-auto p-5 space-y-5 scrollbar-thin">
-                <QueryInput
-                  value={question}
-                  onChange={setQuestion}
-                  onSubmit={handleGenerate}
-                  loading={loading}
-                  disabled={connected === false}
-                />
-                <SQLOutput result={result} error={error} />
-              </div>
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto p-5 space-y-5 scrollbar-thin">
+              <QueryInput
+                value={question}
+                onChange={setQuestion}
+                onSubmit={handleGenerate}
+                loading={loading}
+                disabled={connected === false}
+              />
+              <SQLOutput result={result} error={error} />
             </div>
           </div>
         </main>
