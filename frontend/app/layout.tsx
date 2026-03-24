@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Source_Serif_4 } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { ToastProvider } from "@/components/Toast";
+import { Navbar } from "@/components/Navbar";
 import "@/styles/globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -20,8 +21,11 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} ${sourceSerif.variable} font-sans`}>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
-          <ToastProvider>{children}</ToastProvider>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+          <ToastProvider>
+            <Navbar />
+            {children}
+          </ToastProvider>
         </ThemeProvider>
       </body>
     </html>
