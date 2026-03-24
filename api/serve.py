@@ -5,7 +5,6 @@ import sys
 import time
 import argparse
 import os
-import math
 from pathlib import Path
 from contextlib import asynccontextmanager
 
@@ -18,7 +17,6 @@ from typing import Optional
 
 try:
     import torch
-    import torch.nn.functional as F
     from utils.helpers import get_device, confidence_from_scores
     HAS_TORCH = True
 except ImportError:
@@ -131,7 +129,7 @@ def _generate_smart_sql(question: str, schema: str) -> tuple[str, float, float]:
                 filter_col = col
             break
 
-    def _extract_where_clause(q: str, text_cols: list, columns: list) -> str | None:
+    def _extract_where_clause(q: str, text_cols: list) -> str | None:
         """Try to extract a WHERE clause from the question for text-based filtering."""
         skip_words = {"the", "a", "an", "all", "each", "every"}
         col_synonyms = {
@@ -149,6 +147,7 @@ def _generate_smart_sql(question: str, schema: str) -> tuple[str, float, float]:
         }
 
         def _format_val(val: str) -> str:
+            val = val.replace("'", "''")
             return val.upper() if len(val) <= 3 else val.title()
 
         for col in text_cols:
@@ -170,7 +169,7 @@ def _generate_smart_sql(question: str, schema: str) -> tuple[str, float, float]:
                     return f"{col} = '{_format_val(val)}'"
 
         for col in text_cols:
-            pattern = rf'\b(?:named|called)\s+["\']?([A-Za-z]\w+)["\']?'
+            pattern = r'\b(?:named|called)\s+["\']?([A-Za-z]\w+)["\']?'
             m = re.search(pattern, q)
             if m:
                 val = m.group(1).strip()
@@ -178,9 +177,8 @@ def _generate_smart_sql(question: str, schema: str) -> tuple[str, float, float]:
                     return f"{col} = '{_format_val(val)}'"
 
         for col in text_cols:
-            synonyms = col_synonyms.get(col.lower(), [])
-            for syn in synonyms:
-                pattern = rf'\b(?:in|from|of|for|with)\s+(?:the\s+)?["\']?([A-Za-z]\w+)["\']?\s*$'
+            if col_synonyms.get(col.lower()):
+                pattern = r'\b(?:in|from|of|for|with)\s+(?:the\s+)?["\']?([A-Za-z]\w+)["\']?\s*$'
                 m = re.search(pattern, q)
                 if m:
                     val = m.group(1).strip()
@@ -282,29 +280,29 @@ def _generate_smart_sql(question: str, schema: str) -> tuple[str, float, float]:
         sql = f"SELECT {select_cols} FROM {table_name} ORDER BY {target_col} {order} LIMIT {n}"
     elif re.search(r'\bhow many\b', q):
         sql = f"SELECT COUNT(*) FROM {table_name}"
-        where = _extract_where_clause(q, text_cols, columns)
+        where = _extract_where_clause(q, text_cols)
         if where:
             sql += f" WHERE {where}"
         elif re.search(r'where|with|that|which|whose', q):
             sql += f" WHERE {filter_col} IS NOT NULL"
     elif re.search(r'\baverage\b|\bavg\b|\bmean\b', q):
         sql = f"SELECT AVG({agg_col}) FROM {table_name}"
-        where = _extract_where_clause(q, text_cols, columns)
+        where = _extract_where_clause(q, text_cols)
         if where:
             sql += f" WHERE {where}"
     elif re.search(r'\bmaximum\b|\bmax\b', q):
         sql = f"SELECT MAX({agg_col}) FROM {table_name}"
-        where = _extract_where_clause(q, text_cols, columns)
+        where = _extract_where_clause(q, text_cols)
         if where:
             sql += f" WHERE {where}"
     elif re.search(r'\bminimum\b|\bmin\b', q):
         sql = f"SELECT MIN({agg_col}) FROM {table_name}"
-        where = _extract_where_clause(q, text_cols, columns)
+        where = _extract_where_clause(q, text_cols)
         if where:
             sql += f" WHERE {where}"
     elif re.search(r'\bsum\b|\btotal\b', q):
         sql = f"SELECT SUM({agg_col}) FROM {table_name}"
-        where = _extract_where_clause(q, text_cols, columns)
+        where = _extract_where_clause(q, text_cols)
         if where:
             sql += f" WHERE {where}"
     elif re.search(r'\bgroup\b|\beach\b|\bper\b|\bby\s+\w+\b', q):
@@ -323,7 +321,7 @@ def _generate_smart_sql(question: str, schema: str) -> tuple[str, float, float]:
                 else:
                     sql = f"SELECT {select_cols} FROM {table_name} WHERE {agg_col} IS NOT NULL"
         else:
-            where = _extract_where_clause(q, text_cols, columns)
+            where = _extract_where_clause(q, text_cols)
             if where:
                 sql = f"SELECT {select_cols} FROM {table_name} WHERE {where}"
             else:
@@ -332,7 +330,7 @@ def _generate_smart_sql(question: str, schema: str) -> tuple[str, float, float]:
                 sql += f" ORDER BY {agg_col} DESC"
     else:
         select_cols = ", ".join(columns[:4]) if len(columns) > 1 else "*"
-        where = _extract_where_clause(q, text_cols, columns)
+        where = _extract_where_clause(q, text_cols)
         if where:
             sql = f"SELECT {select_cols} FROM {table_name} WHERE {where}"
         else:
