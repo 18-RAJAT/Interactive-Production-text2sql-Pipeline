@@ -125,7 +125,7 @@ export default function DashboardPage() {
           </div>
 
           <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-1 overflow-y-auto p-5 space-y-5 scrollbar-thin">
+            <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-6 md:space-y-8 scrollbar-thin">
               <QueryInput
                 value={question}
                 onChange={setQuestion}
