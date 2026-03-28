@@ -9,6 +9,8 @@ API_PORT="${API_PORT:-8000}"
 FRONTEND_PORT="${FRONTEND_PORT:-3000}"
 
 cleanup() {
+    echo ""
+    echo "Shutting down..."
     if [ -n "$API_PID" ]; then
         kill "$API_PID" 2>/dev/null
     fi
@@ -17,7 +19,18 @@ cleanup() {
     fi
     exit 0
 }
-trap cleanup INT TERM
+trap cleanup INT TERM EXIT
+
+free_port() {
+    local port=$1
+    local pids
+    pids=$(lsof -ti:"$port" 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+        echo "  Killing existing process(es) on port $port (PIDs: $pids)..."
+        echo "$pids" | xargs kill -9 2>/dev/null || true
+        sleep 1
+    fi
+}
 
 if [ ! -d "$VENV_DIR" ]; then
     echo "[1/5] Creating virtual environment..."
@@ -42,10 +55,24 @@ else
 fi
 cd ..
 
+free_port "$API_PORT"
+free_port "$FRONTEND_PORT"
+
 echo "[4/5] Starting API server on $API_HOST:$API_PORT..."
 $PYTHON -m uvicorn api.serve:app --host "$API_HOST" --port "$API_PORT" &
 API_PID=$!
-sleep 3
+
+for i in 1 2 3 4 5; do
+    if kill -0 "$API_PID" 2>/dev/null; then
+        if curl -s "http://localhost:$API_PORT/health" >/dev/null 2>&1; then
+            break
+        fi
+    else
+        echo "  ERROR: API server failed to start."
+        exit 1
+    fi
+    sleep 1
+done
 
 if kill -0 "$API_PID" 2>/dev/null; then
     echo "  API server running (PID $API_PID)"
@@ -59,6 +86,8 @@ cd "$FRONTEND_DIR"
 NEXT_PUBLIC_API_URL="http://localhost:$API_PORT" npx next dev -p "$FRONTEND_PORT" &
 FRONTEND_PID=$!
 cd ..
+
+sleep 2
 
 echo ""
 echo "==================================="
