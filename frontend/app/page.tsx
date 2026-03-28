@@ -75,7 +75,7 @@ const fadeUp = {
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background">
-      <section className="relative py-24 md:py-36 overflow-hidden">
+      <section className="relative py-14 md:py-20 overflow-hidden">
         <div className="absolute inset-0 pointer-events-none">
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full bg-primary/[0.04] blur-[120px]" />
           <div className="absolute top-1/4 right-1/4 w-[400px] h-[400px] rounded-full bg-primary/[0.03] blur-[80px]" />
@@ -125,14 +125,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="py-24 md:py-32">
+      <section className="py-12 md:py-16">
         <div className="container mx-auto px-4 md:px-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
-            className="text-center mb-16"
+            className="text-center mb-10"
           >
             <h2 className="text-3xl sm:text-4xl font-serif font-light tracking-tight text-foreground mb-4">
               Why <span className="text-primary italic">Text-to-SQL</span>?
@@ -170,14 +170,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="py-24 md:py-32 bg-card">
+      <section className="py-12 md:py-16 bg-card">
         <div className="container mx-auto px-4 md:px-6">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
-            className="text-center mb-16"
+            className="text-center mb-10"
           >
             <h2 className="text-3xl sm:text-4xl font-serif font-light tracking-tight text-foreground mb-4">
               Three Steps.{" "}
@@ -217,7 +217,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="py-24 md:py-32">
+      <section className="py-12 md:py-16">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
