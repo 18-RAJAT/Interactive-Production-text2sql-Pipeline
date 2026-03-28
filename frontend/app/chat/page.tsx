@@ -320,6 +320,7 @@ export default function ChatPage() {
   const [loading, setLoading] = useState(false);
   const [loadingType, setLoadingType] = useState<"sql" | "explanation">("sql");
   const [connected, setConnected] = useState<boolean | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const conversationsRef = useRef(conversations);
@@ -570,7 +571,7 @@ export default function ChatPage() {
                       <MessageSquare className="w-3.5 h-3.5 flex-shrink-0" />
                       <span className="text-sm truncate flex-1">{conv.title}</span>
                       <button
-                        onClick={(e) => { e.stopPropagation(); deleteConversation(conv.id); }}
+                        onClick={(e) => { e.stopPropagation(); setDeleteTarget(conv.id); }}
                         className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-claude-bg-300/50 hover:text-red-500 transition-all"
                       >
                         <Trash2 className="w-3 h-3" />
@@ -638,19 +639,7 @@ export default function ChatPage() {
                 </svg>
               </div>
               <h1 className="text-3xl sm:text-4xl font-serif font-light text-claude-text-200 mb-3 tracking-tight text-center">
-                {greeting},{" "}
-                <span className="relative inline-block pb-2">
-                  Rajat
-                  <svg
-                    className="absolute w-[140%] h-[20px] -bottom-1 -left-[5%] text-claude-accent"
-                    viewBox="0 0 140 24"
-                    fill="none"
-                    preserveAspectRatio="none"
-                    aria-hidden="true"
-                  >
-                    <path d="M6 16 Q 70 24, 134 14" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" />
-                  </svg>
-                </span>
+                {greeting}
               </h1>
               <p className="text-sm text-claude-text-400 mb-8 text-center max-w-md">
                 Generate SQL queries from natural language or ask about SQL concepts.
@@ -754,6 +743,52 @@ export default function ChatPage() {
           />
         </div>
       </div>
+
+      <AnimatePresence>
+        {deleteTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+            onClick={() => setDeleteTarget(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.15 }}
+              className="bg-white rounded-2xl shadow-xl p-6 mx-4 max-w-sm w-full border border-claude-bg-300/60"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+                  <Trash2 className="w-5 h-5 text-red-500" />
+                </div>
+                <h3 className="text-base font-semibold text-claude-text-100">Delete conversation?</h3>
+              </div>
+              <p className="text-sm text-claude-text-300 mb-5 pl-[52px]">
+                This conversation will be permanently removed. This action cannot be undone.
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setDeleteTarget(null)}
+                  className="px-4 py-2 text-sm font-medium text-claude-text-200 rounded-lg hover:bg-claude-bg-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => { deleteConversation(deleteTarget); setDeleteTarget(null); }}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
