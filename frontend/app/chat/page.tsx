@@ -12,6 +12,7 @@ import ClaudeChatInput from "@/components/ui/claude-style-chat-input";
 import type { AttachedFile } from "@/components/ui/claude-style-chat-input";
 import { generateSQL, checkHealth } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { findKnowledgeEntry, classifyIntent, getAllTopicNames } from "@/lib/sql-knowledge";
 
 type MessageType = "sql" | "explanation" | "error";
 
@@ -58,284 +59,6 @@ CREATE TABLE departments (
   name VARCHAR(50),
   manager_id INT
 );`;
-
-const SQL_GENERATION_PATTERNS = [
-  /^(show|find|get|list|fetch|retrieve|display|select|count|calculate|compute)\b/i,
-  /^(how many|what('s| is| are) the (total|average|max|min|sum|count))/i,
-  /^(give me|return|pull|extract)\b/i,
-  /\b(where|from|group by|order by|having|limit|join)\b.*\b(table|column|row|record)\b/i,
-  /\b(employees?|departments?|managers?|salary|salaries|hire.?date)\b/i,
-  /\b(greater than|less than|more than|above|below|between|equal to)\b.*\b\d+/i,
-  /\b(top|bottom|highest|lowest|maximum|minimum|biggest|smallest)\s+\d*/i,
-  /\b(last|past|recent|first)\s+\d+\s+(days?|months?|years?|weeks?)/i,
-  /\b(sorted|ordered|grouped|filtered)\b/i,
-];
-
-const SQL_KNOWLEDGE: Record<string, { title: string; content: string; example: string }> = {
-  "what is sql": {
-    title: "What is SQL?",
-    content: "SQL (Structured Query Language) is a standard programming language designed for managing and manipulating relational databases. It allows you to create, read, update, and delete data stored in tables. SQL is used by virtually every application that works with structured data.\n\nSQL is divided into sub-languages:\n\n• DDL (Data Definition Language) — CREATE, ALTER, DROP, TRUNCATE\n• DML (Data Manipulation Language) — SELECT, INSERT, UPDATE, DELETE\n• DCL (Data Control Language) — GRANT, REVOKE\n• TCL (Transaction Control Language) — COMMIT, ROLLBACK, SAVEPOINT",
-    example: "SELECT name, salary\nFROM employees\nWHERE department = 'Engineering'\nORDER BY salary DESC;",
-  },
-  "ddl dml dcl tcl": {
-    title: "DDL / DML / DCL / TCL — SQL Sub-Languages",
-    content: "SQL commands are grouped into four categories based on their function:\n\nDDL (Data Definition Language) defines and modifies database structure:\n\n• CREATE — create tables, views, indexes, databases\n• ALTER — modify existing structures (add/drop columns, change types)\n• DROP — permanently remove objects\n• TRUNCATE — remove all rows from a table (faster than DELETE)\n• RENAME — rename an object\n\nDML (Data Manipulation Language) works with the data inside tables:\n\n• SELECT — retrieve/query data\n• INSERT — add new rows\n• UPDATE — modify existing rows\n• DELETE — remove specific rows\n• MERGE — upsert (insert or update)\n\nDCL (Data Control Language) manages permissions and access:\n\n• GRANT — give privileges to users/roles\n• REVOKE — remove privileges from users/roles\n\nTCL (Transaction Control Language) manages transactions:\n\n• COMMIT — save all changes permanently\n• ROLLBACK — undo changes since last commit\n• SAVEPOINT — create a restore point within a transaction\n• SET TRANSACTION — set transaction properties (isolation level, read/write)",
-    example: "-- DDL\nCREATE TABLE products (\n  id INT PRIMARY KEY,\n  name VARCHAR(100),\n  price DECIMAL(10,2)\n);\n\n-- DML\nINSERT INTO products VALUES (1, 'Widget', 29.99);\nSELECT * FROM products WHERE price > 20;\n\n-- DCL\nGRANT SELECT, INSERT ON products TO analyst_role;\n\n-- TCL\nBEGIN;\nUPDATE products SET price = 24.99 WHERE id = 1;\nCOMMIT;",
-  },
-  "what is a join": {
-    title: "SQL JOINs",
-    content: "A JOIN clause combines rows from two or more tables based on a related column between them. JOINs are fundamental to relational databases because data is typically spread across multiple tables.\n\nTypes of JOINs:\n\n• INNER JOIN — returns only matching rows from both tables\n• LEFT JOIN — returns all rows from the left table, with matches from the right\n• RIGHT JOIN — returns all rows from the right table, with matches from the left\n• FULL OUTER JOIN — returns all rows when there's a match in either table\n• CROSS JOIN — returns the Cartesian product of both tables\n• SELF JOIN — a table joined with itself",
-    example: "SELECT e.name, d.name AS department\nFROM employees e\nINNER JOIN departments d\n  ON e.department_id = d.id;",
-  },
-  "what is a where clause": {
-    title: "WHERE Clause",
-    content: "The WHERE clause filters rows based on specified conditions. It's used with SELECT, UPDATE, and DELETE statements to target specific records. You can combine multiple conditions using AND, OR, and NOT operators.\n\nCommon operators:\n\n• = , != , <> — equality / inequality\n• < , > , <= , >= — comparison\n• BETWEEN — range check\n• LIKE — pattern matching (% for any chars, _ for single char)\n• IN — match against a list\n• IS NULL / IS NOT NULL — null checks\n• EXISTS — check if a subquery returns rows",
-    example: "SELECT name, salary\nFROM employees\nWHERE department = 'Sales'\n  AND salary > 50000\n  AND hire_date BETWEEN '2024-01-01' AND '2024-12-31';",
-  },
-  "what is group by": {
-    title: "GROUP BY Clause",
-    content: "GROUP BY groups rows that share values in specified columns into summary rows. It's almost always used with aggregate functions like COUNT, SUM, AVG, MAX, and MIN to compute statistics per group.\n\nThe HAVING clause can filter groups after aggregation (unlike WHERE, which filters rows before grouping).",
-    example: "SELECT department, \n       COUNT(*) AS total_employees,\n       AVG(salary) AS avg_salary\nFROM employees\nGROUP BY department\nHAVING COUNT(*) > 5\nORDER BY avg_salary DESC;",
-  },
-  "what is an index": {
-    title: "Database Indexes",
-    content: "An index is a data structure that improves the speed of data retrieval on a table at the cost of additional storage and slower writes. Think of it like a book's index — instead of scanning every page, you look up the topic and jump directly to the right page.\n\nWhen to use indexes:\n\n• Columns frequently used in WHERE clauses\n• Columns used in JOIN conditions\n• Columns used in ORDER BY\n\nWhen to avoid:\n\n• Small tables (full scan is fast enough)\n• Columns with many NULL values\n• Tables with heavy INSERT/UPDATE operations",
-    example: "CREATE INDEX idx_employee_dept\n  ON employees(department);\n\nCREATE UNIQUE INDEX idx_employee_email\n  ON employees(email);",
-  },
-  "what is a primary key": {
-    title: "Primary Keys & Foreign Keys",
-    content: "A PRIMARY KEY uniquely identifies each record in a table. It must contain unique, non-null values. Each table can have only one primary key, though it can span multiple columns (composite key).\n\nA FOREIGN KEY is a column that references the primary key of another table, creating a relationship between the two tables. It enforces referential integrity — you can't insert a value that doesn't exist in the referenced table.",
-    example: "CREATE TABLE departments (\n  id INT PRIMARY KEY,\n  name VARCHAR(50)\n);\n\nCREATE TABLE employees (\n  id INT PRIMARY KEY,\n  name VARCHAR(100),\n  dept_id INT,\n  FOREIGN KEY (dept_id) REFERENCES departments(id)\n);",
-  },
-  "what is a subquery": {
-    title: "Subqueries",
-    content: "A subquery is a query nested inside another query. It can appear in SELECT, FROM, or WHERE clauses. Subqueries are useful when you need to use the result of one query as input for another.\n\nTypes:\n\n• Scalar subquery — returns a single value\n• Row subquery — returns a single row\n• Table subquery — returns a result set\n• Correlated subquery — references the outer query",
-    example: "SELECT name, salary\nFROM employees\nWHERE salary > (\n  SELECT AVG(salary)\n  FROM employees\n);",
-  },
-  "what is normalization": {
-    title: "Database Normalization",
-    content: "Normalization is the process of organizing database tables to minimize data redundancy and dependency. It divides large tables into smaller ones and links them using relationships.\n\nNormal Forms:\n\n• 1NF — eliminate repeating groups; each cell holds a single value\n• 2NF — remove partial dependencies (all non-key columns depend on the full primary key)\n• 3NF — remove transitive dependencies (non-key columns depend only on the primary key)\n• BCNF — every determinant is a candidate key",
-    example: "-- Instead of one denormalized table:\n-- employees(id, name, dept_name, dept_location)\n\n-- Normalize into two tables:\nCREATE TABLE departments (\n  id INT PRIMARY KEY,\n  name VARCHAR(50),\n  location VARCHAR(100)\n);\n\nCREATE TABLE employees (\n  id INT PRIMARY KEY,\n  name VARCHAR(100),\n  dept_id INT REFERENCES departments(id)\n);",
-  },
-  "what are aggregate functions": {
-    title: "Aggregate Functions",
-    content: "Aggregate functions perform calculations on a set of values and return a single result. They're commonly used with GROUP BY to compute statistics per group.\n\nCommon aggregate functions:\n\n• COUNT() — number of rows\n• SUM() — total of a numeric column\n• AVG() — average value\n• MAX() — highest value\n• MIN() — lowest value\n• GROUP_CONCAT() / STRING_AGG() — concatenate values",
-    example: "SELECT \n  department,\n  COUNT(*) AS headcount,\n  SUM(salary) AS total_payroll,\n  AVG(salary) AS avg_salary,\n  MAX(salary) AS top_salary,\n  MIN(salary) AS entry_salary\nFROM employees\nGROUP BY department;",
-  },
-  "difference between where and having": {
-    title: "WHERE vs HAVING",
-    content: "Both WHERE and HAVING filter data, but they operate at different stages of query execution:\n\nWHERE filters individual rows before any grouping occurs. It cannot use aggregate functions.\n\nHAVING filters groups after GROUP BY has been applied. It can use aggregate functions.\n\nExecution order: FROM → WHERE → GROUP BY → HAVING → SELECT → ORDER BY",
-    example: "SELECT department, AVG(salary) AS avg_sal\nFROM employees\nWHERE hire_date > '2023-01-01'\nGROUP BY department\nHAVING AVG(salary) > 60000;",
-  },
-  "what is a transaction": {
-    title: "Database Transactions",
-    content: "A transaction is a sequence of operations performed as a single logical unit of work. Transactions follow the ACID properties:\n\n• Atomicity — all operations succeed or all fail\n• Consistency — database stays in a valid state\n• Isolation — concurrent transactions don't interfere\n• Durability — committed changes survive system failures\n\nKey commands: BEGIN, COMMIT, ROLLBACK, SAVEPOINT",
-    example: "BEGIN TRANSACTION;\n\nUPDATE accounts SET balance = balance - 500\n  WHERE id = 1;\n\nUPDATE accounts SET balance = balance + 500\n  WHERE id = 2;\n\nCOMMIT;",
-  },
-  "what is a view": {
-    title: "SQL Views",
-    content: "A view is a virtual table based on the result of a SELECT query. It doesn't store data itself — it dynamically pulls data from the underlying tables each time it's queried. Views simplify complex queries, provide a layer of security, and present data in a specific format.\n\nTypes:\n\n• Regular view — a saved SELECT query\n• Materialized view — stores the result set physically (faster reads, needs refresh)\n• Updatable view — allows INSERT/UPDATE/DELETE on simple views",
-    example: "CREATE VIEW high_earners AS\nSELECT name, department, salary\nFROM employees\nWHERE salary > 80000;\n\nSELECT * FROM high_earners\nORDER BY salary DESC;",
-  },
-  "what are window functions": {
-    title: "Window Functions",
-    content: "Window functions perform calculations across a set of rows that are related to the current row, without collapsing them into a single output row like GROUP BY does. They use the OVER() clause to define the window (partition and ordering).\n\nCommon window functions:\n\n• ROW_NUMBER() — sequential row number within partition\n• RANK() — rank with gaps for ties\n• DENSE_RANK() — rank without gaps\n• LAG() / LEAD() — access previous/next row values\n• SUM() OVER() / AVG() OVER() — running totals/averages\n• NTILE(n) — divide rows into n roughly equal groups",
-    example: "SELECT \n  name,\n  department,\n  salary,\n  RANK() OVER (PARTITION BY department ORDER BY salary DESC) AS dept_rank,\n  AVG(salary) OVER (PARTITION BY department) AS dept_avg\nFROM employees;",
-  },
-  "what is union": {
-    title: "UNION & Set Operations",
-    content: "UNION combines the result sets of two or more SELECT statements into a single result. The queries must have the same number of columns with compatible data types.\n\nSet operations:\n\n• UNION — combines results, removes duplicates\n• UNION ALL — combines results, keeps duplicates (faster)\n• INTERSECT — returns only rows present in both results\n• EXCEPT / MINUS — returns rows from first result not in second",
-    example: "SELECT name, 'Employee' AS type FROM employees\nUNION ALL\nSELECT name, 'Manager' AS type FROM departments\n  INNER JOIN employees ON departments.manager_id = employees.id;",
-  },
-  "what is order by": {
-    title: "ORDER BY Clause",
-    content: "ORDER BY sorts the result set by one or more columns. By default, sorting is ascending (ASC). Use DESC for descending order. You can sort by column name, alias, position number, or expression.\n\nNULL handling varies by database:\n\n• PostgreSQL: NULLS FIRST / NULLS LAST\n• MySQL: NULLs sort as lowest values\n• SQL Server: NULLs sort as lowest values",
-    example: "SELECT name, department, salary\nFROM employees\nORDER BY department ASC, salary DESC\nLIMIT 20 OFFSET 0;",
-  },
-  "what is distinct": {
-    title: "DISTINCT Keyword",
-    content: "DISTINCT eliminates duplicate rows from the result set. It applies to the entire row, not just a single column. For removing duplicates based on specific columns while keeping other data, use GROUP BY or window functions instead.\n\nVariations:\n\n• SELECT DISTINCT — unique rows\n• COUNT(DISTINCT col) — count unique values\n• DISTINCT ON (col) — first row per group (PostgreSQL)",
-    example: "SELECT DISTINCT department\nFROM employees\nORDER BY department;\n\nSELECT COUNT(DISTINCT department) AS unique_depts\nFROM employees;",
-  },
-  "what is null": {
-    title: "NULL Handling in SQL",
-    content: "NULL represents the absence of a value — it's not zero, not an empty string, and not false. Any comparison with NULL returns NULL (not true or false), which is why you must use IS NULL / IS NOT NULL instead of = NULL.\n\nKey behaviors:\n\n• NULL = NULL → NULL (not true!)\n• NULL + 5 → NULL\n• NULL in WHERE → row is excluded\n• COUNT(*) counts NULLs, COUNT(col) does not\n• Use COALESCE(col, default) to replace NULLs\n• Use NULLIF(a, b) to return NULL when a = b",
-    example: "SELECT \n  name,\n  COALESCE(department, 'Unassigned') AS department,\n  COALESCE(salary, 0) AS salary\nFROM employees\nWHERE manager_id IS NOT NULL;",
-  },
-  "what is case when": {
-    title: "CASE / WHEN Expression",
-    content: "CASE is SQL's conditional expression (like if/else). It can be used in SELECT, WHERE, ORDER BY, and even inside aggregate functions. There are two forms:\n\nSimple CASE — compares a value against a list:\n\n• CASE col WHEN val1 THEN result1 WHEN val2 THEN result2 END\n\nSearched CASE — evaluates boolean conditions:\n\n• CASE WHEN condition1 THEN result1 WHEN condition2 THEN result2 ELSE default END",
-    example: "SELECT \n  name,\n  salary,\n  CASE\n    WHEN salary >= 100000 THEN 'Senior'\n    WHEN salary >= 60000 THEN 'Mid-Level'\n    ELSE 'Junior'\n  END AS level\nFROM employees\nORDER BY salary DESC;",
-  },
-  "what is a stored procedure": {
-    title: "Stored Procedures & Functions",
-    content: "A stored procedure is a precompiled collection of SQL statements stored in the database. It can accept parameters, perform logic, and return results. Functions are similar but must return a value and can be used inside SQL expressions.\n\nBenefits:\n\n• Performance — precompiled execution plan\n• Security — controlled access to data\n• Reusability — call from multiple applications\n• Maintainability — change logic in one place\n\nProcedure vs Function:\n\n• Procedure — called with CALL/EXEC, can modify data, doesn't need to return\n• Function — called in expressions, should be side-effect free, must return a value",
-    example: "CREATE PROCEDURE give_raise(\n  IN dept VARCHAR(50),\n  IN pct DECIMAL(5,2)\n)\nBEGIN\n  UPDATE employees\n  SET salary = salary * (1 + pct / 100)\n  WHERE department = dept;\nEND;\n\nCALL give_raise('Engineering', 10.0);",
-  },
-  "what is a trigger": {
-    title: "Database Triggers",
-    content: "A trigger is a special stored procedure that automatically executes when a specific event occurs on a table (INSERT, UPDATE, or DELETE). Triggers are useful for auditing, enforcing business rules, and maintaining data integrity.\n\nTiming:\n\n• BEFORE — runs before the event (can modify/cancel the operation)\n• AFTER — runs after the event (good for logging/auditing)\n• INSTEAD OF — replaces the event (used with views)\n\nScope:\n\n• FOR EACH ROW — fires once per affected row\n• FOR EACH STATEMENT — fires once per SQL statement",
-    example: "CREATE TRIGGER audit_salary_change\nAFTER UPDATE OF salary ON employees\nFOR EACH ROW\nBEGIN\n  INSERT INTO salary_audit (employee_id, old_salary, new_salary, changed_at)\n  VALUES (OLD.id, OLD.salary, NEW.salary, NOW());\nEND;",
-  },
-};
-
-const TOPIC_ALIASES: Record<string, string> = {
-  "sql": "what is sql",
-  "ddl": "ddl dml dcl tcl",
-  "dml": "ddl dml dcl tcl",
-  "dcl": "ddl dml dcl tcl",
-  "tcl": "ddl dml dcl tcl",
-  "ddl dml": "ddl dml dcl tcl",
-  "ddl/dml": "ddl dml dcl tcl",
-  "ddl/dml/dcl/tcl": "ddl dml dcl tcl",
-  "ddl dml dcl": "ddl dml dcl tcl",
-  "sql sub-languages": "ddl dml dcl tcl",
-  "sql sublanguages": "ddl dml dcl tcl",
-  "sql commands": "ddl dml dcl tcl",
-  "types of sql": "ddl dml dcl tcl",
-  "sql categories": "ddl dml dcl tcl",
-  "joins": "what is a join",
-  "join": "what is a join",
-  "inner join": "what is a join",
-  "left join": "what is a join",
-  "right join": "what is a join",
-  "outer join": "what is a join",
-  "full outer join": "what is a join",
-  "cross join": "what is a join",
-  "self join": "what is a join",
-  "where": "what is a where clause",
-  "where clause": "what is a where clause",
-  "group by": "what is group by",
-  "groupby": "what is group by",
-  "index": "what is an index",
-  "indexes": "what is an index",
-  "indexing": "what is an index",
-  "primary key": "what is a primary key",
-  "foreign key": "what is a primary key",
-  "keys": "what is a primary key",
-  "subquery": "what is a subquery",
-  "subqueries": "what is a subquery",
-  "nested query": "what is a subquery",
-  "normalization": "what is normalization",
-  "normal forms": "what is normalization",
-  "1nf": "what is normalization",
-  "2nf": "what is normalization",
-  "3nf": "what is normalization",
-  "bcnf": "what is normalization",
-  "aggregate": "what are aggregate functions",
-  "aggregates": "what are aggregate functions",
-  "aggregate functions": "what are aggregate functions",
-  "where vs having": "difference between where and having",
-  "having": "difference between where and having",
-  "having clause": "difference between where and having",
-  "transaction": "what is a transaction",
-  "transactions": "what is a transaction",
-  "acid": "what is a transaction",
-  "view": "what is a view",
-  "views": "what is a view",
-  "materialized view": "what is a view",
-  "window function": "what are window functions",
-  "window functions": "what are window functions",
-  "row_number": "what are window functions",
-  "rank": "what are window functions",
-  "dense_rank": "what are window functions",
-  "lag": "what are window functions",
-  "lead": "what are window functions",
-  "over": "what are window functions",
-  "partition by": "what are window functions",
-  "union": "what is union",
-  "union all": "what is union",
-  "intersect": "what is union",
-  "except": "what is union",
-  "set operations": "what is union",
-  "order by": "what is order by",
-  "sorting": "what is order by",
-  "asc": "what is order by",
-  "desc": "what is order by",
-  "distinct": "what is distinct",
-  "unique values": "what is distinct",
-  "null": "what is null",
-  "nulls": "what is null",
-  "is null": "what is null",
-  "coalesce": "what is null",
-  "nullif": "what is null",
-  "case": "what is case when",
-  "case when": "what is case when",
-  "if else": "what is case when",
-  "conditional": "what is case when",
-  "stored procedure": "what is a stored procedure",
-  "stored procedures": "what is a stored procedure",
-  "procedure": "what is a stored procedure",
-  "function": "what is a stored procedure",
-  "functions": "what is a stored procedure",
-  "trigger": "what is a trigger",
-  "triggers": "what is a trigger",
-  "audit": "what is a trigger",
-};
-
-function findKnowledgeEntry(query: string) {
-  const lower = query.toLowerCase().replace(/[?!.,]/g, "").trim();
-
-  for (const [key, entry] of Object.entries(SQL_KNOWLEDGE)) {
-    if (lower.includes(key) || lower === key) return entry;
-  }
-
-  for (const [alias, key] of Object.entries(TOPIC_ALIASES)) {
-    if (lower.includes(alias) || lower === alias) return SQL_KNOWLEDGE[key];
-  }
-
-  const normalized = lower.replace(/\//g, " ").replace(/\s+/g, " ");
-  for (const [alias, key] of Object.entries(TOPIC_ALIASES)) {
-    if (normalized.includes(alias)) return SQL_KNOWLEDGE[key];
-  }
-
-  const words = normalized.split(/\s+/).filter(w => w.length > 2);
-  for (const [alias, key] of Object.entries(TOPIC_ALIASES)) {
-    if (words.some(w => w === alias)) return SQL_KNOWLEDGE[key];
-  }
-
-  return null;
-}
-
-function classifyIntent(query: string): "sql_generation" | "explanation" {
-  const trimmed = query.trim();
-  const lower = trimmed.toLowerCase();
-
-  const explanationStarters = [
-    "what is", "what are", "what's", "whats",
-    "explain", "describe", "define", "tell me about",
-    "how does", "how do", "how to", "why is", "why do", "why are",
-    "difference between", "compare", "meaning of",
-    "can you explain", "help me understand",
-    "what does", "when to use", "when should",
-    "types of",
-  ];
-
-  for (const starter of explanationStarters) {
-    if (lower.startsWith(starter) || lower.includes(starter)) return "explanation";
-  }
-
-  if (findKnowledgeEntry(trimmed)) return "explanation";
-
-  for (const pattern of SQL_GENERATION_PATTERNS) {
-    if (pattern.test(trimmed)) return "sql_generation";
-  }
-
-  if (lower.endsWith("?")) return "explanation";
-
-  const allTopicTerms = [
-    ...Object.keys(SQL_KNOWLEDGE),
-    ...Object.keys(TOPIC_ALIASES),
-  ];
-  const normalized = lower.replace(/[?!.,/]/g, " ").replace(/\s+/g, " ").trim();
-  for (const term of allTopicTerms) {
-    if (normalized === term || normalized.split(" ").every(w => term.includes(w))) {
-      return "explanation";
-    }
-  }
-
-  return "sql_generation";
-}
 
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -420,15 +143,15 @@ function ExplanationContent({ content }: { content: string }) {
   return (
     <div className="space-y-2.5">
       {parts.map((block, i) => {
-        if (block.startsWith("•") || block.includes("\n•")) {
+        if (block.startsWith("\u2022") || block.includes("\n\u2022")) {
           const lines = block.split("\n").filter(Boolean);
           return (
             <ul key={i} className="space-y-1">
               {lines.map((line, j) => (
                 <li key={j} className="text-sm text-claude-text-200 leading-relaxed flex gap-2">
-                  {line.startsWith("•") ? (
+                  {line.startsWith("\u2022") ? (
                     <>
-                      <span className="text-claude-accent mt-0.5 flex-shrink-0">•</span>
+                      <span className="text-claude-accent mt-0.5 flex-shrink-0">{"\u2022"}</span>
                       <span>{line.slice(1).trim()}</span>
                     </>
                   ) : (
@@ -449,13 +172,7 @@ function ExplanationContent({ content }: { content: string }) {
   );
 }
 
-function SchemaPanel({
-  schema,
-  onChange,
-}: {
-  schema: string;
-  onChange: (s: string) => void;
-}) {
+function SchemaPanel({ schema, onChange }: { schema: string; onChange: (s: string) => void }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -661,6 +378,12 @@ export default function ChatPage() {
     if (activeId === id) setActiveId(null);
   }, [activeId]);
 
+  const buildFallbackTopicList = useCallback(() => {
+    const topics = getAllTopicNames();
+    const topicList = topics.slice(0, 15).map(t => `\u2022 "${t}"`).join("\n");
+    return `I don't have a specific entry for that topic yet, but I cover ${topics.length} SQL topics. Here are some you can ask about:\n\n${topicList}\n\nYou can also ask me to generate SQL queries like:\n\n\u2022 "Show all employees with salary above 50000"\n\u2022 "Find departments with more than 10 employees"\n\u2022 "Get the average salary by department"`;
+  }, []);
+
   const handleSend = useCallback(async (data: {
     message: string;
     files: AttachedFile[];
@@ -728,8 +451,8 @@ export default function ChatPage() {
             id: generateId(),
             role: "assistant",
             type: "explanation",
-            content: "SQL Concept",
-            sql: `I don't have a detailed entry for that specific topic yet, but here's what I can help with:\n\nYou can ask me to explain SQL concepts like:\n\n• "What is SQL?"\n• "Explain JOINs"\n• "What is GROUP BY?"\n• "Difference between WHERE and HAVING"\n• "What is a primary key?"\n• "Explain subqueries"\n• "What are aggregate functions?"\n• "What is normalization?"\n• "What is a transaction?"\n\nOr ask me to generate SQL queries like:\n\n• "Show all employees with salary above 50000"\n• "Find departments with more than 10 employees"\n• "Get the average salary by department"`,
+            content: "SQL Topics",
+            sql: buildFallbackTopicList(),
             timestamp: Date.now(),
           };
 
@@ -788,7 +511,7 @@ export default function ChatPage() {
     } finally {
       setLoading(false);
     }
-  }, [activeId, conversations, updateConversation]);
+  }, [activeId, conversations, updateConversation, buildFallbackTopicList]);
 
   const currentHour = new Date().getHours();
   let greeting = "Good morning";
@@ -968,9 +691,10 @@ export default function ChatPage() {
                   <div className="flex flex-wrap justify-center gap-2">
                     {[
                       "What is SQL?",
+                      "DDL/DML/DCL/TCL",
                       "Explain JOINs",
-                      "What is GROUP BY?",
-                      "Difference between WHERE and HAVING",
+                      "Window functions",
+                      "What is CTE?",
                     ].map((q) => (
                       <button
                         key={q}
