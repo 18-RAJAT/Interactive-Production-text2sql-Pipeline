@@ -100,7 +100,7 @@ const FilePreviewCard: React.FC<FilePreviewCardProps> = ({ file, onRemove }) => 
     );
 };
 
-interface Model {
+export interface Model {
     id: string;
     name: string;
     description: string;
@@ -202,23 +202,27 @@ export interface ClaudeChatInputProps {
         model: string;
         isThinkingEnabled: boolean;
     }) => void;
+    customModels?: Model[];
+    defaultModel?: string;
+    loading?: boolean;
 }
 
-export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage }) => {
+export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage, customModels, defaultModel, loading }) => {
     const [message, setMessage] = useState("");
     const [files, setFiles] = useState<AttachedFile[]>([]);
     const [isDragging, setIsDragging] = useState(false);
-    const [selectedModel, setSelectedModel] = useState("sonnet-4.5");
     const [isThinkingEnabled, setIsThinkingEnabled] = useState(false);
 
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const models = [
+    const models = customModels || [
         { id: "opus-4.5", name: "Opus 4.5", description: "Most capable for complex work" },
         { id: "sonnet-4.5", name: "Sonnet 4.5", description: "Best for everyday tasks" },
         { id: "haiku-4.5", name: "Haiku 4.5", description: "Fastest for quick answers" }
     ];
+
+    const [selectedModel, setSelectedModel] = useState(defaultModel || models[0].id);
 
     useEffect(() => {
         if (textareaRef.current) {
@@ -283,7 +287,7 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage 
     };
 
     const handleSend = () => {
-        if (!message.trim() && files.length === 0) return;
+        if (loading || (!message.trim() && files.length === 0)) return;
         onSendMessage({ message, files, model: selectedModel, isThinkingEnabled });
         setMessage("");
         setFiles([]);
@@ -377,16 +381,18 @@ export const ClaudeChatInput: React.FC<ClaudeChatInputProps> = ({ onSendMessage 
                             <div>
                                 <button
                                     onClick={handleSend}
-                                    disabled={!hasContent}
+                                    disabled={!hasContent || loading}
                                     className={`inline-flex items-center justify-center relative shrink-0 transition-colors h-8 w-8 rounded-xl active:scale-95
-                                        ${hasContent
-                                            ? 'bg-claude-accent text-white hover:bg-claude-accent-hover shadow-md'
-                                            : 'bg-claude-accent/30 text-white/60 cursor-default'}
+                                        ${loading
+                                            ? 'bg-claude-accent/60 text-white cursor-wait'
+                                            : hasContent
+                                                ? 'bg-claude-accent text-white hover:bg-claude-accent-hover shadow-md'
+                                                : 'bg-claude-accent/30 text-white/60 cursor-default'}
                                     `}
                                     type="button"
                                     aria-label="Send message"
                                 >
-                                    <Icons.ArrowUp className="w-4 h-4" />
+                                    {loading ? <Icons.Loader2 className="w-4 h-4 animate-spin" /> : <Icons.ArrowUp className="w-4 h-4" />}
                                 </button>
                             </div>
                         </div>
