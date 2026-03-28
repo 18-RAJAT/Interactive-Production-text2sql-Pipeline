@@ -269,17 +269,15 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
 
         {isError ? (
           <p className="text-sm leading-relaxed text-red-600">{msg.content}</p>
-        ) : isExplanation && msg.exampleSql ? (
+        ) : isExplanation ? (
           <>
             <ExplanationContent content={msg.sql || ""} />
-            <SqlBlock code={msg.exampleSql} label="Example" />
+            {msg.exampleSql && <SqlBlock code={msg.exampleSql} label="Example" />}
           </>
         ) : (
           <>
-            {!isExplanation && (
-              <p className="text-sm leading-relaxed text-claude-text-200">{msg.content}</p>
-            )}
-            {msg.sql && !isExplanation && <SqlBlock code={msg.sql} />}
+            <p className="text-sm leading-relaxed text-claude-text-200">{msg.content}</p>
+            {msg.sql && <SqlBlock code={msg.sql} />}
           </>
         )}
 
@@ -324,15 +322,28 @@ export default function ChatPage() {
   const [connected, setConnected] = useState<boolean | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const conversationsRef = useRef(conversations);
+  conversationsRef.current = conversations;
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+
   const activeConv = conversations.find(c => c.id === activeId) || null;
 
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) setConversations(JSON.parse(stored) as Conversation[]);
+      if (stored) {
+        const parsed = JSON.parse(stored) as Conversation[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setConversations(parsed);
+        }
+      }
       const storedActive = localStorage.getItem(ACTIVE_KEY);
       if (storedActive) setActiveId(storedActive);
-    } catch {}
+    } catch {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(ACTIVE_KEY);
+    }
   }, []);
 
   useEffect(() => {
@@ -343,6 +354,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     if (activeId) localStorage.setItem(ACTIVE_KEY, activeId);
+    else localStorage.removeItem(ACTIVE_KEY);
   }, [activeId]);
 
   useEffect(() => {
@@ -374,144 +386,128 @@ export default function ChatPage() {
   }, []);
 
   const deleteConversation = useCallback((id: string) => {
-    setConversations(prev => prev.filter(c => c.id !== id));
-    if (activeId === id) setActiveId(null);
-  }, [activeId]);
-
-  const buildFallbackTopicList = useCallback(() => {
-    const topics = getAllTopicNames();
-    const topicList = topics.slice(0, 15).map(t => `\u2022 "${t}"`).join("\n");
-    return `I don't have a specific entry for that topic yet, but I cover ${topics.length} SQL topics. Here are some you can ask about:\n\n${topicList}\n\nYou can also ask me to generate SQL queries like:\n\n\u2022 "Show all employees with salary above 50000"\n\u2022 "Find departments with more than 10 employees"\n\u2022 "Get the average salary by department"`;
+    setConversations(prev => {
+      const filtered = prev.filter(c => c.id !== id);
+      if (filtered.length === 0) localStorage.removeItem(STORAGE_KEY);
+      return filtered;
+    });
+    setActiveId(prev => prev === id ? null : prev);
   }, []);
 
-  const handleSend = useCallback(async (data: {
+  function pushMessage(convId: string, msg: ChatMessage) {
+    setConversations(prev => prev.map(c =>
+      c.id === convId
+        ? { ...c, messages: [...c.messages, msg], updatedAt: Date.now() }
+        : c
+    ));
+  }
+
+  const handleSend = async (data: {
     message: string;
     files: AttachedFile[];
     model: string;
     isThinkingEnabled: boolean;
   }) => {
-    if (!data.message.trim()) return;
+    const text = data.message.trim();
+    if (!text || loading) return;
 
-    let convId = activeId;
+    let convId = activeIdRef.current;
     let schema = DEFAULT_SCHEMA;
 
     if (!convId) {
+      const newId = generateId();
       const newConv: Conversation = {
-        id: generateId(),
-        title: data.message.slice(0, 60),
+        id: newId,
+        title: text.slice(0, 60),
         messages: [],
         schema: DEFAULT_SCHEMA,
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
       setConversations(prev => [newConv, ...prev]);
-      setActiveId(newConv.id);
-      convId = newConv.id;
-      schema = newConv.schema;
+      setActiveId(newId);
+      convId = newId;
     } else {
-      const conv = conversations.find(c => c.id === convId);
-      schema = conv?.schema || DEFAULT_SCHEMA;
+      const conv = conversationsRef.current.find(c => c.id === convId);
+      if (conv) schema = conv.schema || DEFAULT_SCHEMA;
     }
 
     const userMsg: ChatMessage = {
       id: generateId(),
       role: "user",
-      content: data.message,
+      content: text,
       timestamp: Date.now(),
     };
 
-    const currentConvId = convId;
-
-    updateConversation(currentConvId, c => {
-      const title = c.messages.length === 0 ? data.message.slice(0, 60) : c.title;
-      return { ...c, title, messages: [...c.messages, userMsg], updatedAt: Date.now() };
+    setConversations(prev => {
+      const found = prev.find(c => c.id === convId);
+      if (!found) return prev;
+      return prev.map(c =>
+        c.id === convId
+          ? { ...c, title: c.messages.length === 0 ? text.slice(0, 60) : c.title, messages: [...c.messages, userMsg], updatedAt: Date.now() }
+          : c
+      );
     });
 
-    const intent = classifyIntent(data.message);
+    const intent = classifyIntent(text);
 
     if (intent === "explanation") {
       setLoading(true);
       setLoadingType("explanation");
-
-      await new Promise(r => setTimeout(r, 400 + Math.random() * 400));
-
-      const entry = findKnowledgeEntry(data.message);
-
-      const assistantMsg: ChatMessage = entry
-        ? {
-            id: generateId(),
-            role: "assistant",
-            type: "explanation",
-            content: entry.title,
-            sql: entry.content,
-            exampleSql: entry.example,
+      try {
+        await new Promise(r => setTimeout(r, 300 + Math.random() * 300));
+        const entry = findKnowledgeEntry(text);
+        if (entry) {
+          pushMessage(convId, {
+            id: generateId(), role: "assistant", type: "explanation",
+            content: entry.title, sql: entry.content, exampleSql: entry.example,
             timestamp: Date.now(),
-          }
-        : {
-            id: generateId(),
-            role: "assistant",
-            type: "explanation",
-            content: "SQL Topics",
-            sql: buildFallbackTopicList(),
-            timestamp: Date.now(),
-          };
-
-      updateConversation(currentConvId, c => ({
-        ...c,
-        messages: [...c.messages, assistantMsg],
-        updatedAt: Date.now(),
-      }));
-
-      setLoading(false);
+          });
+        } else {
+          const topics = getAllTopicNames();
+          const topicList = topics.slice(0, 15).map(t => `\u2022 "${t}"`).join("\n");
+          const fallback = `I cover ${topics.length} SQL topics. Here are some:\n\n${topicList}\n\nYou can also generate SQL queries like:\n\u2022 "Show all employees with salary above 50000"\n\u2022 "Get the average salary by department"`;
+          pushMessage(convId, {
+            id: generateId(), role: "assistant", type: "explanation",
+            content: "SQL Topics", sql: fallback, timestamp: Date.now(),
+          });
+        }
+      } catch {
+        pushMessage(convId, {
+          id: generateId(), role: "assistant", type: "error",
+          content: "Something went wrong looking up this topic.", timestamp: Date.now(),
+        });
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
     setLoading(true);
     setLoadingType("sql");
-
     try {
-      const response = await generateSQL({ question: data.message, schema });
-
-      const assistantMsg: ChatMessage = {
-        id: generateId(),
-        role: "assistant",
-        type: "sql",
+      const response = await generateSQL({ question: text, schema });
+      pushMessage(convId, {
+        id: generateId(), role: "assistant", type: "sql",
         content: response.generated_sql
-          ? "Here's the generated SQL query for your question:"
-          : "I couldn't generate a SQL query for that question. Try rephrasing or check the schema context.",
-        sql: response.generated_sql,
-        confidence: response.confidence,
-        latency: response.latency_ms,
-        timestamp: Date.now(),
-      };
-
-      updateConversation(currentConvId, c => ({
-        ...c,
-        messages: [...c.messages, assistantMsg],
-        updatedAt: Date.now(),
-      }));
+          ? "Here's the generated SQL query:"
+          : "Couldn't generate SQL for that question. Try rephrasing.",
+        sql: response.generated_sql, confidence: response.confidence,
+        latency: response.latency_ms, timestamp: Date.now(),
+      });
     } catch (err: unknown) {
-      const errorMessage = (err && typeof err === "object" && "message" in err)
-        ? (err as { message: string }).message
-        : "Failed to generate SQL. Please check if the API server is running.";
-
-      const errorMsg: ChatMessage = {
-        id: generateId(),
-        role: "assistant",
-        type: "error",
-        content: errorMessage,
-        timestamp: Date.now(),
-      };
-
-      updateConversation(currentConvId, c => ({
-        ...c,
-        messages: [...c.messages, errorMsg],
-        updatedAt: Date.now(),
-      }));
+      let errorMessage = "Failed to generate SQL. Check if the API server is running.";
+      if (err && typeof err === "object" && "message" in err) {
+        errorMessage = (err as { message: string }).message;
+      }
+      pushMessage(convId, {
+        id: generateId(), role: "assistant", type: "error",
+        content: errorMessage, timestamp: Date.now(),
+      });
     } finally {
       setLoading(false);
     }
-  }, [activeId, conversations, updateConversation, buildFallbackTopicList]);
+  };
 
   const currentHour = new Date().getHours();
   let greeting = "Good morning";

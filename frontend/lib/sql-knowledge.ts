@@ -288,6 +288,8 @@ export function classifyIntent(query: string): "sql_generation" | "explanation" 
   const trimmed = query.trim();
   const lower = trimmed.toLowerCase();
 
+  if (!trimmed || trimmed.length < 2) return "explanation";
+
   const explanationStarters = [
     "what is", "what are", "what's", "whats",
     "explain", "describe", "define", "tell me about",
@@ -296,6 +298,7 @@ export function classifyIntent(query: string): "sql_generation" | "explanation" 
     "can you explain", "help me understand",
     "what does", "when to use", "when should",
     "types of", "list of", "examples of",
+    "hi", "hello", "hey", "thanks", "thank you", "ok", "okay",
   ];
 
   for (const starter of explanationStarters) {
@@ -321,6 +324,9 @@ export function classifyIntent(query: string): "sql_generation" | "explanation" 
   }
 
   if (lower.endsWith("?")) return "explanation";
+
+  const words = trimmed.split(/\s+/);
+  if (words.length < 3) return "explanation";
 
   return "sql_generation";
 }
