@@ -6,7 +6,7 @@ import {
   MessageSquare, Plus, PanelLeftClose, PanelLeft,
   Database, Copy, Check, Clock, Trash2,
   ChevronRight, Sparkles, AlertCircle, Wifi, WifiOff,
-  BookOpen, Zap,
+  BookOpen, Zap, User, LogOut,
 } from "lucide-react";
 import ClaudeChatInput from "@/components/ui/claude-style-chat-input";
 import type { AttachedFile } from "@/components/ui/claude-style-chat-input";
@@ -39,6 +39,7 @@ interface Conversation {
 
 const STORAGE_KEY = "text-to-sql-conversations";
 const ACTIVE_KEY = "text-to-sql-active-conv";
+const NAME_KEY = "text-to-sql-username";
 
 const MODELS = [
   { id: "lora-finetuned", name: "LoRA Fine-Tuned", description: "Schema-aware SQL generation" },
@@ -208,7 +209,7 @@ function SchemaPanel({ schema, onChange }: { schema: string; onChange: (s: strin
   );
 }
 
-function MessageBubble({ msg }: { msg: ChatMessage }) {
+function MessageBubble({ msg, userInitial }: { msg: ChatMessage; userInitial: string }) {
   if (msg.role === "user") {
     return (
       <motion.div
@@ -222,7 +223,7 @@ function MessageBubble({ msg }: { msg: ChatMessage }) {
           <p className="text-[10px] text-white/50 text-right mt-2">{formatTime(msg.timestamp)}</p>
         </div>
         <div className="flex-shrink-0 w-7 h-7 rounded-full bg-claude-accent flex items-center justify-center text-white text-xs font-semibold mt-0.5">
-          R
+          {userInitial}
         </div>
       </motion.div>
     );
@@ -321,6 +322,9 @@ export default function ChatPage() {
   const [loadingType, setLoadingType] = useState<"sql" | "explanation">("sql");
   const [connected, setConnected] = useState<boolean | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string>("");
+  const [nameInput, setNameInput] = useState("");
+  const [showNamePrompt, setShowNamePrompt] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const conversationsRef = useRef(conversations);
@@ -341,6 +345,9 @@ export default function ChatPage() {
       }
       const storedActive = localStorage.getItem(ACTIVE_KEY);
       if (storedActive) setActiveId(storedActive);
+      const storedName = localStorage.getItem(NAME_KEY);
+      if (storedName) setUserName(storedName);
+      else setShowNamePrompt(true);
     } catch {
       localStorage.removeItem(STORAGE_KEY);
       localStorage.removeItem(ACTIVE_KEY);
@@ -582,7 +589,24 @@ export default function ChatPage() {
               ))}
             </div>
 
-            <div className="px-3 py-2.5 border-t border-claude-bg-300/50">
+            <div className="px-3 py-2.5 border-t border-claude-bg-300/50 space-y-2">
+              {userName && (
+                <div className="flex items-center justify-between px-2 py-1.5">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-claude-accent flex items-center justify-center text-white text-[10px] font-semibold">
+                      {userName[0].toUpperCase()}
+                    </div>
+                    <span className="text-xs font-medium text-claude-text-200 truncate max-w-[140px]">{userName}</span>
+                  </div>
+                  <button
+                    onClick={() => { setUserName(""); localStorage.removeItem(NAME_KEY); setShowNamePrompt(true); }}
+                    className="p-1 rounded text-claude-text-400 hover:text-claude-text-200 hover:bg-claude-bg-200 transition-colors"
+                    title="Sign out"
+                  >
+                    <LogOut className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
               <div className={cn(
                 "flex items-center gap-2 text-[11px] font-medium px-2 py-1 rounded-md",
                 connected === true && "text-emerald-600",
@@ -639,7 +663,15 @@ export default function ChatPage() {
                 </svg>
               </div>
               <h1 className="text-3xl sm:text-4xl font-serif font-light text-claude-text-200 mb-3 tracking-tight text-center">
-                {greeting}
+                {greeting}{userName ? ", " : ""}
+                {userName && (
+                  <span className="relative inline-block pb-2">
+                    {userName}
+                    <svg className="absolute w-[120%] h-[14px] -bottom-0.5 -left-[10%] text-claude-accent" viewBox="0 0 140 20" fill="none" preserveAspectRatio="none" aria-hidden="true">
+                      <path d="M6 14 Q 70 20, 134 12" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" fill="none" />
+                    </svg>
+                  </span>
+                )}
               </h1>
               <p className="text-sm text-claude-text-400 mb-8 text-center max-w-md">
                 Generate SQL queries from natural language or ask about SQL concepts.
@@ -696,7 +728,7 @@ export default function ChatPage() {
           ) : (
             <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
               {activeConv?.messages.map((msg) => (
-                <MessageBubble key={msg.id} msg={msg} />
+                <MessageBubble key={msg.id} msg={msg} userInitial={userName ? userName[0].toUpperCase() : "U"} />
               ))}
 
               {loading && (
@@ -783,6 +815,81 @@ export default function ChatPage() {
                   className="px-4 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors"
                 >
                   Delete
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showNamePrompt && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white rounded-2xl shadow-xl p-6 mx-4 max-w-sm w-full border border-claude-bg-300/60"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-claude-accent/10 flex items-center justify-center flex-shrink-0">
+                  <User className="w-5 h-5 text-claude-accent" />
+                </div>
+                <div>
+                  <h3 className="text-base font-semibold text-claude-text-100">Welcome!</h3>
+                  <p className="text-xs text-claude-text-400">Enter your name to get started</p>
+                </div>
+              </div>
+              <input
+                type="text"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && nameInput.trim()) {
+                    const name = nameInput.trim();
+                    setUserName(name);
+                    localStorage.setItem(NAME_KEY, name);
+                    setShowNamePrompt(false);
+                    setNameInput("");
+                  }
+                }}
+                placeholder="Your name"
+                autoFocus
+                className="w-full px-4 py-2.5 text-sm rounded-lg border border-claude-bg-300 bg-claude-bg-0 text-claude-text-100 placeholder:text-claude-text-400 outline-none focus:ring-2 focus:ring-claude-accent/30 focus:border-claude-accent/50 transition-all mb-4"
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setShowNamePrompt(false)}
+                  className="px-4 py-2 text-sm font-medium text-claude-text-300 rounded-lg hover:bg-claude-bg-200 transition-colors"
+                >
+                  Skip
+                </button>
+                <button
+                  onClick={() => {
+                    if (nameInput.trim()) {
+                      const name = nameInput.trim();
+                      setUserName(name);
+                      localStorage.setItem(NAME_KEY, name);
+                      setShowNamePrompt(false);
+                      setNameInput("");
+                    }
+                  }}
+                  disabled={!nameInput.trim()}
+                  className={cn(
+                    "px-4 py-2 text-sm font-medium rounded-lg transition-colors",
+                    nameInput.trim()
+                      ? "bg-claude-accent text-white hover:bg-claude-accent-hover"
+                      : "bg-claude-bg-200 text-claude-text-400 cursor-not-allowed"
+                  )}
+                >
+                  Continue
                 </button>
               </div>
             </motion.div>
